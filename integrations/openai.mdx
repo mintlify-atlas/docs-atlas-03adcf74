@@ -1,0 +1,263 @@
+---
+title: OpenAI integration
+description: Automatically trace OpenAI API calls with ZeroEval
+---
+
+The OpenAI integration wraps your OpenAI client to automatically trace all API calls including chat completions, embeddings, image generation, and audio transcription.
+
+## Installation
+
+```bash
+npm install openai zeroeval
+```
+
+## Basic usage
+
+Wrap your OpenAI client with `wrapOpenAI()` or the auto-detecting `wrap()` function:
+
+```typescript
+import { OpenAI } from 'openai';
+import { wrapOpenAI } from 'zeroeval';
+
+const openai = wrapOpenAI(new OpenAI());
+
+// All calls are now automatically traced
+const completion = await openai.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [{ role: 'user', content: 'Hello!' }]
+});
+```
+
+<Note>
+If `ZEROEVAL_API_KEY` is set in your environment, the SDK will automatically initialize. Otherwise, call `ze.init({ apiKey: 'your-key' })` before using the wrapper.
+</Note>
+
+## What gets traced
+
+The OpenAI wrapper automatically captures:
+
+### Chat completions
+
+- Input messages (role and content)
+- Model name and parameters (temperature, max_tokens, etc.)
+- Response text
+- Token usage (prompt tokens, completion tokens)
+- Latency (time to first token for streaming)
+- Throughput (characters per second)
+- Tool calls and function calls
+
+### Embeddings
+
+- Input text or array of texts
+- Model name
+- Embedding dimensions
+- Number of embeddings generated
+
+### Images, audio, and other APIs
+
+- Input parameters
+- API-specific outputs
+- Error messages and codes
+
+## Streaming support
+
+Streaming responses are fully supported. The wrapper yields chunks transparently while capturing metrics:
+
+```typescript
+const stream = await openai.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [{ role: 'user', content: 'Count from 1 to 5' }],
+  stream: true
+});
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk.choices[0]?.delta?.content || '');
+}
+```
+
+**Streaming metrics captured:**
+
+- Time to first token (latency)
+- Total response time
+- Throughput (characters per second)
+- Full accumulated response text
+- Token usage (on OpenAI-native models with `stream_options`)
+
+<Info>
+For OpenAI-native models (not Azure or third-party providers), the wrapper automatically enables `stream_options: { include_usage: true }` to capture token counts in streaming mode.
+</Info>
+
+## Token tracking
+
+Token usage is automatically extracted from the OpenAI response:
+
+- **Non-streaming:** Captured from `response.usage`
+- **Streaming:** Captured from usage-only chunks (final chunk) when available
+- **Span attributes:** Set as `inputTokens` and `outputTokens`
+
+## Supported API methods
+
+The wrapper traces the following OpenAI API methods:
+
+| API Method | Traced As | Kind |
+|------------|-----------|------|
+| `chat.completions.create` | `openai.chat.completions.create` | `llm` |
+| `embeddings.create` | `openai.embeddings.create` | `embedding` |
+| `images.generate` | `openai.images.generate` | `operation` |
+| `images.edit` | `openai.images.edit` | `operation` |
+| `images.createVariation` | `openai.images.createVariation` | `operation` |
+| `audio.transcriptions.create` | `openai.audio.transcriptions.create` | `operation` |
+| `audio.translations.create` | `openai.audio.translations.create` | `operation` |
+
+## Using within traced spans
+
+Combine the OpenAI wrapper with manual spans for full context:
+
+```typescript
+import * as ze from 'zeroeval';
+import { OpenAI } from 'openai';
+
+const openai = ze.wrap(new OpenAI());
+
+await ze.withSpan({ name: 'process_user_query' }, async () => {
+  // Set trace-level tags
+  const traceId = ze.getCurrentTrace();
+  if (traceId) {
+    ze.setTag(traceId, { feature: 'chat', userId: '123' });
+  }
+
+  // Multiple OpenAI calls within the same span
+  const response1 = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [{ role: 'user', content: 'What is the capital of France?' }]
+  });
+
+  const response2 = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [
+      { role: 'user', content: 'What is the capital of France?' },
+      { role: 'assistant', content: response1.choices[0].message.content },
+      { role: 'user', content: 'What is its population?' }
+    ]
+  });
+});
+```
+
+## Model patching
+
+If a prompt version has a bound model, the wrapper automatically patches the model parameter:
+
+```typescript
+const messages = [
+  {
+    role: 'system',
+    content: `<zeroeval prompt_version_id="abc123">You are helpful.</zeroeval>`
+  },
+  { role: 'user', content: 'Hello!' }
+];
+
+// If prompt version abc123 has model="gpt-4o", it overrides the model below
+const completion = await openai.chat.completions.create({
+  model: 'gpt-4o-mini', // This may be overridden
+  messages
+});
+```
+
+The wrapper strips the `zeroeval/` prefix before sending to the OpenAI API.
+
+## Error handling
+
+Errors are automatically captured in the span:
+
+```typescript
+try {
+  await openai.chat.completions.create({
+    model: 'invalid-model',
+    messages: [{ role: 'user', content: 'Hello' }]
+  });
+} catch (error) {
+  // Error is traced with code, message, and stack trace
+  console.error(error);
+}
+```
+
+## Example
+
+Here's a complete example from the SDK repository:
+
+```typescript
+import { OpenAI } from 'openai';
+import * as ze from 'zeroeval';
+
+const openai = ze.wrap(new OpenAI());
+
+// Basic chat completion
+const completion = await openai.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [
+    { role: 'system', content: 'You are a helpful assistant.' },
+    { role: 'user', content: 'What is 2 + 2?' }
+  ],
+  temperature: 0.7,
+  max_tokens: 100
+});
+
+console.log(completion.choices[0].message.content);
+
+// Streaming
+const stream = await openai.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [{ role: 'user', content: 'Count from 1 to 5' }],
+  stream: true
+});
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk.choices[0]?.delta?.content || '');
+}
+
+// Embeddings
+const embedding = await openai.embeddings.create({
+  model: 'text-embedding-3-small',
+  input: 'The quick brown fox jumps over the lazy dog'
+});
+
+console.log('Dimensions:', embedding.data[0].embedding.length);
+```
+
+## API reference
+
+### `wrapOpenAI(client)`
+
+Wraps an OpenAI client instance to automatically trace all API calls.
+
+**Parameters:**
+
+- `client` - OpenAI client instance from `new OpenAI()`
+
+**Returns:**
+
+Wrapped OpenAI client with the same type and interface.
+
+**Example:**
+
+```typescript
+import { OpenAI } from 'openai';
+import { wrapOpenAI } from 'zeroeval';
+
+const client = wrapOpenAI(new OpenAI({ apiKey: 'sk-...' }));
+```
+
+<Tip>
+You can also use the auto-detecting `wrap()` function:
+
+```typescript
+const client = ze.wrap(new OpenAI());
+```
+</Tip>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Vercel AI integration" href="/integrations/vercel-ai" />
+  <Card title="LangChain integration" href="/integrations/langchain" />
+</CardGroup>

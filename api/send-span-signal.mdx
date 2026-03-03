@@ -1,0 +1,157 @@
+---
+title: sendSpanSignal()
+description: Send a signal to the current span
+---
+
+Send a signal to the current active span. This is a convenience function that automatically determines the span ID from the current execution context.
+
+## Signature
+
+```typescript
+function sendSpanSignal(
+  name: string,
+  value: string | boolean | number,
+  signalType?: 'boolean' | 'numerical'
+): void
+```
+
+## Parameters
+
+<ParamField path="name" type="string" required>
+  Name of the signal.
+</ParamField>
+
+<ParamField path="value" type="string | boolean | number" required>
+  Value of the signal. Can be a string, boolean, or number.
+</ParamField>
+
+<ParamField path="signalType" type="'boolean' | 'numerical'" optional>
+  Optional signal type. If not provided, the type will be auto-detected based on the value.
+</ParamField>
+
+## Returns
+
+`void` - The signal is added to the current span and will be sent when the span is flushed.
+
+## Behavior
+
+- If no active span is found, a warning is logged and the signal is not sent
+- The signal is added directly to the current span using `span.addSignal()`
+- Signals are sent when the span completes and is flushed
+- This function is synchronous and does not block execution
+
+## Examples
+
+### Send a signal to the current span
+
+```typescript
+import { sendSpanSignal, tracer } from 'zeroeval';
+
+async function processUser(userId: string) {
+  const span = tracer.startSpan('processUser', {
+    attributes: { userId }
+  });
+  
+  try {
+    // Send a signal to the current span
+    sendSpanSignal('user_id', userId);
+    
+    // Simulate some processing
+    const isVipUser = Math.random() > 0.8;
+    sendSpanSignal('is_vip', isVipUser);
+    
+    if (isVipUser) {
+      sendSpanSignal('vip_discount', 0.2);
+    }
+    
+    return { userId, isVipUser };
+  } finally {
+    tracer.endSpan(span);
+  }
+}
+```
+
+### Add signals directly to spans
+
+```typescript
+import { tracer } from 'zeroeval';
+
+async function analyzeData(data: any[]) {
+  const span = tracer.startSpan('analyzeData', {
+    attributes: { dataSize: data.length }
+  });
+  
+  try {
+    // Add signals to the span
+    span.addSignal('data_size', data.length);
+    span.addSignal('has_data', data.length > 0);
+    
+    // Process data...
+    const result = data.reduce((sum, item) => sum + item.value, 0);
+    span.addSignal('total_value', result);
+    
+    return result;
+  } finally {
+    tracer.endSpan(span);
+  }
+}
+```
+
+### Track span-level performance metrics
+
+```typescript
+import { sendSpanSignal, tracer } from 'zeroeval';
+
+async function fetchData(url: string) {
+  const span = tracer.startSpan('fetchData');
+  const startTime = Date.now();
+  
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    const duration = Date.now() - startTime;
+    sendSpanSignal('fetch_duration_ms', duration);
+    sendSpanSignal('response_size', JSON.stringify(data).length);
+    sendSpanSignal('cache_hit', response.headers.get('x-cache') === 'HIT');
+    
+    return data;
+  } finally {
+    tracer.endSpan(span);
+  }
+}
+```
+
+### Conditional span signals
+
+```typescript
+import { sendSpanSignal, span } from 'zeroeval';
+
+@span()
+async function processWithRetry(task: string) {
+  let attempts = 0;
+  let success = false;
+  
+  while (attempts < 3 && !success) {
+    attempts++;
+    try {
+      await executeTask(task);
+      success = true;
+    } catch (error) {
+      // Continue retrying
+    }
+  }
+  
+  sendSpanSignal('retry_attempts', attempts);
+  sendSpanSignal('success_on_retry', attempts > 1 && success);
+  sendSpanSignal('final_success', success);
+}
+```
+
+## Related
+
+- [sendSignal()](/api/send-signal) - Send a signal to a specific entity
+- [sendTraceSignal()](/api/send-trace-signal) - Send a signal to the current trace
+- [sendSessionSignal()](/api/send-session-signal) - Send a signal to the current session
+- [sendBulkSignals()](/api/send-bulk-signals) - Send multiple signals in a batch
+- [Span.addSignal()](/api/span-add-signal) - Alternative method for adding signals to spans

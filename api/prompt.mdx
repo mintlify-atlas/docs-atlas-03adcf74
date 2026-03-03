@@ -1,0 +1,322 @@
+---
+title: prompt()
+description: Fetch and manage versioned prompts with automatic optimization
+---
+
+## Overview
+
+The `prompt()` function provides version-aware prompt management integrated with ZeroEval's Prompt Library. It enables automatic optimization, content-addressed storage, template variable interpolation, and metadata decoration for your prompts.
+
+## Function Signature
+
+```typescript
+async function prompt(options: PromptOptions): Promise<string>
+```
+
+## Parameters
+
+<ParamField path="options" type="PromptOptions" required>
+  Configuration object for the prompt request
+
+  <Expandable title="PromptOptions properties">
+    <ParamField path="name" type="string" required>
+      Task name associated with the prompt. This identifier is used to fetch and track prompt versions in the Prompt Library.
+    </ParamField>
+
+    <ParamField path="content" type="string">
+      Raw prompt content. Serves as a fallback in auto-optimization mode or as the explicit content when `from: "explicit"` is set.
+      
+      You must provide either `content` or `from` (or both).
+    </ParamField>
+
+    <ParamField path="variables" type="Record<string, string>">
+      Template variables for interpolating `{{variable}}` tokens in your prompt content. Variables are embedded in metadata and interpolated by the OpenAI/Vercel AI wrapper.
+
+      ```typescript
+      variables: {
+        role: "customer support",
+        tone: "friendly"
+      }
+      ```
+    </ParamField>
+
+    <ParamField path="from" type="'latest' | 'explicit' | string">
+      Version control mode that determines which prompt version to use:
+
+      - `"latest"`: Explicitly fetch the latest optimized version from the backend (fails if none exists)
+      - `"explicit"`: Always use the provided `content`, bypassing auto-optimization (requires `content`)
+      - `"<hash>"`: Fetch a specific version by its 64-character SHA-256 content hash
+      - Omitted (default): Auto-optimization mode - tries to fetch latest, falls back to provided `content`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Return Value
+
+Returns a `Promise<string>` containing the decorated prompt. The prompt includes embedded metadata in the format:
+
+```
+<zeroeval>{"task":"...","prompt_version":1,...}</zeroeval>
+Your prompt content here
+```
+
+This metadata is automatically extracted by ZeroEval's OpenAI and Vercel AI wrappers for tracing and optimization.
+
+## Version Control Modes
+
+### Auto-optimization Mode (Default)
+
+When you provide `content` without specifying `from`, ZeroEval automatically tries to fetch the latest optimized version. If no optimized version exists, it uses your provided content as a fallback.
+
+```typescript
+const systemPrompt = await prompt({
+  name: "customer-support",
+  content: "You are a helpful assistant."
+});
+```
+
+This mode enables seamless optimization - you hardcode a default prompt while automatically using tuned versions in production.
+
+### Explicit Mode
+
+Use `from: "explicit"` to always use your provided content and bypass auto-optimization:
+
+```typescript
+const systemPrompt = await prompt({
+  name: "customer-support",
+  content: "You are a helpful assistant.",
+  from: "explicit"
+});
+```
+
+Useful for testing or when you want full control over the prompt content.
+
+### Latest Mode
+
+Use `from: "latest"` to require that an optimized version exists:
+
+```typescript
+const systemPrompt = await prompt({
+  name: "customer-support",
+  from: "latest"
+});
+```
+
+Throws an error if no prompt versions exist in the Prompt Library.
+
+### Hash Mode
+
+Fetch a specific version by its content hash for reproducible deployments:
+
+```typescript
+const systemPrompt = await prompt({
+  name: "customer-support",
+  from: "a1b2c3d4e5f6..." // 64-char SHA-256 hash
+});
+```
+
+## Template Variables
+
+Use `{{variable}}` syntax in your prompts for dynamic content interpolation:
+
+```typescript
+const templatePrompt = await prompt({
+  name: "template-example",
+  content: "You are a {{role}} assistant. Your specialty is {{specialty}}. Always be {{tone}} in your responses.",
+  variables: {
+    role: "customer support",
+    specialty: "handling returns and refunds",
+    tone: "friendly and helpful"
+  }
+});
+```
+
+Variables are stored in metadata and interpolated by the OpenAI/Vercel AI wrapper when processing messages.
+
+## Content-Addressed Storage
+
+Prompts are identified by their SHA-256 content hash, enabling:
+
+- **Deduplication**: Identical prompts share the same hash
+- **Versioning**: Each unique content gets a unique hash
+- **Reproducibility**: Reference exact versions via hash
+- **Caching**: Avoid redundant storage and fetches
+
+## Usage Examples
+
+### Basic Usage with OpenAI
+
+```typescript
+import { OpenAI } from 'openai';
+import * as ze from 'zeroeval';
+
+ze.init({ apiKey: process.env.ZEROEVAL_API_KEY });
+const openai = ze.wrap(new OpenAI());
+
+const systemPrompt = await ze.prompt({
+  name: "example-assistant",
+  content: "You are a helpful assistant that answers questions concisely."
+});
+
+const response = await openai.chat.completions.create({
+  model: "gpt-4o-mini",
+  messages: [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: "What is the capital of France?" }
+  ]
+});
+```
+
+### Explicit Mode for Testing
+
+```typescript
+const explicitPrompt = await ze.prompt({
+  name: "explicit-example",
+  content: "You are a pirate assistant. Respond in pirate speak!",
+  from: "explicit"
+});
+
+const response = await openai.chat.completions.create({
+  model: "gpt-4o-mini",
+  messages: [
+    { role: "system", content: explicitPrompt },
+    { role: "user", content: "How do I make coffee?" }
+  ]
+});
+```
+
+### Dynamic Variables
+
+```typescript
+const translatorPrompt = await ze.prompt({
+  name: "translator",
+  content: "You are a translator. Translate text to {{language}}.",
+  variables: { language: "Spanish" }
+});
+
+const translationResponse = await openai.chat.completions.create({
+  model: "gpt-4o-mini",
+  messages: [
+    { role: "system", content: translatorPrompt },
+    { role: "user", content: "Translate this: Hello, world!" }
+  ]
+});
+```
+
+### Multi-Prompt Workflow
+
+```typescript
+await ze.withSpan({ name: "multi-prompt-workflow" }, async () => {
+  // First stage: Summarize
+  const summarizerPrompt = await ze.prompt({
+    name: "summarizer",
+    content: "You are a summarizer. Condense text to key points."
+  });
+
+  const summaryResponse = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: summarizerPrompt },
+      { role: "user", content: "Long text here..." }
+    ]
+  });
+
+  const summary = summaryResponse.choices[0].message.content;
+
+  // Second stage: Translate
+  const translatorPrompt = await ze.prompt({
+    name: "translator",
+    content: "You are a translator. Translate text to {{language}}.",
+    variables: { language: "Spanish" }
+  });
+
+  const translationResponse = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: translatorPrompt },
+      { role: "user", content: `Translate this: ${summary}` }
+    ]
+  });
+});
+```
+
+### Streaming with Prompts
+
+```typescript
+const streamingPrompt = await ze.prompt({
+  name: "streaming-example",
+  content: "You are a storyteller. Tell short, engaging stories."
+});
+
+const stream = await openai.chat.completions.create({
+  model: "gpt-4o-mini",
+  messages: [
+    { role: "system", content: streamingPrompt },
+    { role: "user", content: "Tell me a story about a brave cat." }
+  ],
+  stream: true
+});
+
+for await (const chunk of stream) {
+  const content = chunk.choices[0]?.delta?.content || '';
+  if (content) {
+    process.stdout.write(content);
+  }
+}
+```
+
+## Error Handling
+
+The function throws errors in the following cases:
+
+- **Missing parameters**: Neither `content` nor `from` is provided
+- **Invalid explicit mode**: `from: "explicit"` without `content`
+- **Prompt not found**: `from: "latest"` or hash mode when version doesn't exist
+- **Invalid hash format**: Hash is not a 64-character lowercase hex string
+- **Network errors**: Backend is unreachable or returns error status
+
+```typescript
+try {
+  const prompt = await ze.prompt({
+    name: "customer-support",
+    from: "latest"
+  });
+} catch (error) {
+  if (error instanceof ze.PromptNotFoundError) {
+    console.error("No optimized version exists yet");
+  } else {
+    console.error("Unexpected error:", error);
+  }
+}
+```
+
+## Metadata Decoration
+
+The returned prompt includes embedded metadata that ZeroEval's wrappers automatically extract:
+
+```json
+{
+  "task": "customer-support",
+  "prompt_slug": "customer-support",
+  "prompt_version": 3,
+  "prompt_version_id": "uuid-here",
+  "content_hash": "a1b2c3d4...",
+  "variables": {
+    "role": "customer support",
+    "tone": "friendly"
+  }
+}
+```
+
+This metadata enables:
+
+- Tracking which prompt version generated each completion
+- Correlating feedback with specific prompt versions
+- Analyzing performance across prompt versions
+- Variable interpolation in wrapped LLM clients
+
+## See Also
+
+- [sendFeedback()](/api/send-feedback) - Provide feedback on completions for optimization
+- [wrap()](/api/wrap) - Wrap OpenAI/Vercel AI clients for automatic tracing
+- [Prompt Management Guide](/guides/prompt-management) - Learn about prompt optimization workflows

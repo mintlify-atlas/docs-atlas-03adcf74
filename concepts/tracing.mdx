@@ -1,0 +1,245 @@
+---
+title: Tracing
+description: Learn how ZeroEval's AsyncLocalStorage-based tracing automatically manages context and creates parent-child span relationships
+---
+
+ZeroEval uses Node.js `AsyncLocalStorage` to automatically manage trace context across asynchronous operations. This enables transparent parent-child span relationships without explicit context threading.
+
+## How it works
+
+The tracer maintains a span stack in `AsyncLocalStorage`, which is preserved across async boundaries like promises, callbacks, and async/await.
+
+### Context management
+
+When you start a span, it automatically:
+- Detects the current parent span from the AsyncLocalStorage stack
+- Inherits the `traceId` from the parent (or generates a new one for root spans)
+- Sets its `parentId` to the parent's `spanId`
+- Inherits session information and tags from the parent
+- Pushes itself onto the stack for child spans to discover
+
+<CodeGroup>
+```typescript Example
+import { withSpan, tracer } from 'zeroeval';
+
+async function processOrder(orderId: string) {
+  // Root span - creates new trace
+  await withSpan({ name: 'processOrder' }, async () => {
+    
+    // Child span - automatically inherits traceId and sets parentId
+    await withSpan({ name: 'validateOrder' }, async () => {
+      // validation logic
+    });
+    
+    // Another child span - also inherits from processOrder
+    await withSpan({ name: 'chargePayment' }, async () => {
+      // payment logic
+    });
+  });
+}
+```
+
+```typescript Manual span management
+const rootSpan = tracer.startSpan('processOrder');
+
+// Child spans automatically detect the parent
+const validateSpan = tracer.startSpan('validateOrder');
+tracer.endSpan(validateSpan);
+
+const paymentSpan = tracer.startSpan('chargePayment');
+tracer.endSpan(paymentSpan);
+
+tracer.endSpan(rootSpan);
+```
+</CodeGroup>
+
+Relevant code: [Tracer.ts:106-136](/home/daytona/workspace/source/src/observability/Tracer.ts:106-136)
+
+## Trace lifecycle
+
+### 1. Starting a trace
+
+A trace begins when you create a root span (a span with no parent):
+
+```typescript
+const span = tracer.startSpan('myOperation', {
+  sessionId: 'user-session-123',
+  sessionName: 'User Session',
+  tags: { environment: 'production' }
+});
+```
+
+When there's no parent span:
+- A new `traceId` is generated
+- A new `sessionId` is generated (or uses the provided one)
+- The span becomes the root of the trace
+
+### 2. Building the trace tree
+
+As child spans are created, they form a tree structure:
+
+```typescript
+await withSpan({ name: 'root' }, async () => {
+  // traceId: abc-123, parentId: undefined
+  
+  await withSpan({ name: 'child1' }, async () => {
+    // traceId: abc-123, parentId: root's spanId
+    
+    await withSpan({ name: 'grandchild' }, async () => {
+      // traceId: abc-123, parentId: child1's spanId
+    });
+  });
+  
+  await withSpan({ name: 'child2' }, async () => {
+    // traceId: abc-123, parentId: root's spanId
+  });
+});
+```
+
+### 3. Buffering and ordering
+
+The tracer buffers spans by trace until the entire trace is complete:
+
+- Spans are held in trace-specific buckets (`_traceBuckets`)
+- When the last span in a trace ends, all spans are moved to the main buffer
+- Spans are ordered parent-first before flushing
+- Active traces are tracked via reference counting (`_activeTraceCounts`)
+
+Relevant code: [Tracer.ts:138-175](/home/daytona/workspace/source/src/observability/Tracer.ts:138-175)
+
+### 4. Flushing to backend
+
+Traces are automatically flushed when:
+- The buffer reaches `maxSpans` (default: 100)
+- The flush interval elapses (default: 10 seconds)
+- `tracer.shutdown()` is called
+
+```typescript
+// Manual flush
+await tracer.flush();
+
+// Configure flush behavior
+tracer.configure({
+  maxSpans: 200,
+  flushInterval: 5 // seconds
+});
+```
+
+Relevant code: [Tracer.ts:204-230](/home/daytona/workspace/source/src/observability/Tracer.ts:204-230)
+
+## Accessing current context
+
+You can access the currently active span at any point:
+
+```typescript
+const currentSpan = tracer.currentSpan();
+
+if (currentSpan) {
+  console.log('Trace ID:', currentSpan.traceId);
+  console.log('Span ID:', currentSpan.spanId);
+  console.log('Session ID:', currentSpan.sessionId);
+}
+```
+
+Relevant code: [Tracer.ts:89-92](/home/daytona/workspace/source/src/observability/Tracer.ts:89-92)
+
+## Tag inheritance
+
+Tags are automatically inherited from parent to child spans:
+
+```typescript
+await withSpan({ 
+  name: 'root',
+  tags: { environment: 'prod', region: 'us-west' }
+}, async () => {
+  // Child automatically inherits environment and region tags
+  await withSpan({ 
+    name: 'child',
+    tags: { userId: '123' } // Merges with inherited tags
+  }, async () => {
+    // This span has: environment, region, AND userId
+  });
+});
+```
+
+You can also add tags to all spans in a trace retroactively:
+
+```typescript
+const currentSpan = tracer.currentSpan();
+if (currentSpan) {
+  tracer.addTraceTags(currentSpan.traceId, {
+    outcome: 'success',
+    totalItems: '42'
+  });
+}
+```
+
+Relevant code: [Tracer.ts:178-188](/home/daytona/workspace/source/src/observability/Tracer.ts:178-188)
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use withSpan for most cases">
+    The `withSpan` helper automatically handles span lifecycle and error capture:
+    
+    ```typescript
+    await withSpan({ name: 'operation' }, async () => {
+      // Your code here
+      // Span is automatically ended even if an error is thrown
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Name spans descriptively">
+    Use clear, hierarchical names that indicate the operation:
+    
+    ```typescript
+    // Good
+    'api.orders.create'
+    'db.users.findById'
+    'payment.stripe.charge'
+    
+    // Avoid
+    'operation'
+    'process'
+    'handler'
+    ```
+  </Accordion>
+
+  <Accordion title="Let the tracer manage context">
+    Don't pass spans as function parameters. Trust AsyncLocalStorage:
+    
+    ```typescript
+    // Good - context is automatic
+    async function helper() {
+      await withSpan({ name: 'helper' }, async () => {
+        // Automatically becomes child of current span
+      });
+    }
+    
+    // Avoid - unnecessary manual threading
+    async function helper(parentSpan: Span) {
+      const span = tracer.startSpan('helper');
+      span.parentId = parentSpan.spanId;
+      // ...
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Flush on shutdown">
+    Always flush remaining spans before your application exits:
+    
+    ```typescript
+    process.on('SIGTERM', () => {
+      tracer.shutdown(); // Flushes and cleans up
+      process.exit();
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Related concepts
+
+- [Spans](/concepts/spans) - Learn about span structure and lifecycle
+- [Sessions](/concepts/sessions) - Understand how sessions group traces
+- [Signals](/concepts/signals) - Add metrics to traces and spans

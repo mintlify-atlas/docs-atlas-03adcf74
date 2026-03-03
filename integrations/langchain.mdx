@@ -1,0 +1,405 @@
+---
+title: LangChain integration
+description: Trace LangChain and LangGraph applications with ZeroEvalCallbackHandler
+---
+
+The LangChain integration provides a callback handler that automatically traces LangChain chains, LLMs, tools, retrievers, agents, and LangGraph workflows.
+
+## Installation
+
+```bash
+npm install @langchain/core @langchain/openai zeroeval
+```
+
+For LangGraph support:
+
+```bash
+npm install @langchain/langgraph
+```
+
+## Basic usage
+
+Import from the `zeroeval/langchain` entry point and use the callback handler:
+
+```typescript
+import { init } from 'zeroeval';
+import {
+  ZeroEvalCallbackHandler,
+  setGlobalCallbackHandler
+} from 'zeroeval/langchain';
+import { ChatOpenAI } from '@langchain/openai';
+
+init({ apiKey: 'your-key' });
+
+// Set the handler globally
+setGlobalCallbackHandler(new ZeroEvalCallbackHandler());
+
+// All LangChain calls will now be traced
+const model = new ChatOpenAI({ modelName: 'gpt-4o' });
+const response = await model.invoke('Hello!');
+```
+
+<Note>
+The `zeroeval/langchain` entry point is separate from the main `zeroeval` package to avoid pulling in LangChain dependencies if you don't need them.
+</Note>
+
+## Setting global callback handler
+
+Use `setGlobalCallbackHandler()` to trace all LangChain operations automatically:
+
+```typescript
+import {
+  ZeroEvalCallbackHandler,
+  setGlobalCallbackHandler
+} from 'zeroeval/langchain';
+
+setGlobalCallbackHandler(new ZeroEvalCallbackHandler({
+  debug: false,
+  maxConcurrentSpans: 1000
+}));
+```
+
+Once set, all LangChain chains, LLMs, tools, and agents will be traced without additional configuration.
+
+### Global handler management
+
+The integration provides helper functions for managing the global handler:
+
+```typescript
+import {
+  setGlobalCallbackHandler,
+  getGlobalHandler,
+  clearGlobalHandler
+} from 'zeroeval/langchain';
+
+// Set the handler
+setGlobalCallbackHandler(new ZeroEvalCallbackHandler());
+
+// Retrieve the current handler
+const handler = getGlobalHandler();
+
+// Clear the handler
+clearGlobalHandler();
+```
+
+## Per-invocation callbacks
+
+You can also pass the handler on a per-call basis:
+
+```typescript
+import { ZeroEvalCallbackHandler } from 'zeroeval/langchain';
+import { ChatOpenAI } from '@langchain/openai';
+
+const model = new ChatOpenAI({ modelName: 'gpt-4o' });
+
+const response = await model.invoke(
+  'What is the weather?',
+  {
+    callbacks: [new ZeroEvalCallbackHandler()]
+  }
+);
+```
+
+This approach gives you fine-grained control over which calls are traced.
+
+## What gets traced
+
+The callback handler automatically traces:
+
+### LLM calls
+
+- Model name and parameters (temperature, max_tokens, etc.)
+- Input prompts or messages
+- Output text or chat messages
+- Token usage (prompt tokens, completion tokens)
+- Throughput (tokens per second)
+- Tool calls and structured outputs
+
+### Chains
+
+- Chain name and type
+- Input values
+- Output values
+- Nested chain executions
+
+### Tools
+
+- Tool name and description
+- Input parameters
+- Tool execution results
+- Errors
+
+### Retrievers
+
+- Query text
+- Retrieved documents
+- Document count and metadata
+
+### Agents
+
+- Agent actions and tool selections
+- Agent finish results
+- Multi-step reasoning traces
+
+## LangChain example
+
+Here's a complete example with a chat model and chain:
+
+```typescript
+import { init } from 'zeroeval';
+import {
+  ZeroEvalCallbackHandler,
+  setGlobalCallbackHandler
+} from 'zeroeval/langchain';
+import { ChatOpenAI } from '@langchain/openai';
+import { ChatPromptTemplate } from '@langchain/core/prompts';
+
+init({ apiKey: 'your-key' });
+setGlobalCallbackHandler(new ZeroEvalCallbackHandler());
+
+const model = new ChatOpenAI({ modelName: 'gpt-4o', temperature: 0 });
+
+// Simple chain
+const prompt = ChatPromptTemplate.fromTemplate(
+  'Tell me a {adjective} joke about {topic}'
+);
+const chain = prompt.pipe(model);
+
+const result = await chain.invoke({
+  adjective: 'funny',
+  topic: 'programming'
+});
+
+console.log(result.content);
+```
+
+## LangGraph example
+
+The callback handler works seamlessly with LangGraph:
+
+```typescript
+import { init } from 'zeroeval';
+import {
+  ZeroEvalCallbackHandler,
+  setGlobalCallbackHandler
+} from 'zeroeval/langchain';
+import { ChatOpenAI } from '@langchain/openai';
+import { StateGraph } from '@langchain/langgraph';
+import { BaseMessage, HumanMessage } from '@langchain/core/messages';
+import { ToolNode } from '@langchain/langgraph/prebuilt';
+import { DynamicStructuredTool } from '@langchain/core/tools';
+import { z } from 'zod';
+
+init({ apiKey: 'your-key' });
+setGlobalCallbackHandler(new ZeroEvalCallbackHandler());
+
+interface AgentState {
+  messages: BaseMessage[];
+}
+
+const weatherTool = new DynamicStructuredTool({
+  name: 'get_weather',
+  description: 'Get the current weather in a given location',
+  schema: z.object({
+    location: z.string().describe('The city and state, e.g. San Francisco, CA')
+  }),
+  func: async ({ location }) => {
+    return `The weather in ${location} is sunny and 72°F`;
+  }
+});
+
+const model = new ChatOpenAI({
+  modelName: 'gpt-4o',
+  temperature: 0
+}).bindTools([weatherTool]);
+
+async function callModel(state: AgentState) {
+  const response = await model.invoke(state.messages);
+  return { messages: [response] };
+}
+
+function shouldContinue(state: AgentState) {
+  const lastMessage = state.messages[state.messages.length - 1];
+  if ('tool_calls' in lastMessage && lastMessage.tool_calls?.length > 0) {
+    return 'tools';
+  }
+  return 'end';
+}
+
+const toolNode = new ToolNode<AgentState>([weatherTool]);
+
+const workflow = new StateGraph<AgentState>({
+  channels: {
+    messages: {
+      reducer: (x: BaseMessage[], y: BaseMessage[]) => x.concat(y),
+      default: () => []
+    }
+  }
+})
+  .addNode('agent', callModel)
+  .addNode('tools', toolNode)
+  .addEdge('__start__', 'agent')
+  .addConditionalEdges('agent', shouldContinue, {
+    tools: 'tools',
+    end: '__end__'
+  })
+  .addEdge('tools', 'agent');
+
+const app = workflow.compile();
+
+const result = await app.invoke({
+  messages: [new HumanMessage('What is the weather in San Francisco?')]
+});
+
+console.log(result.messages[result.messages.length - 1].content);
+```
+
+All nodes, edges, and tool calls in the graph are automatically traced.
+
+## Structured outputs
+
+The handler supports LangChain's structured output feature:
+
+```typescript
+import { z } from 'zod';
+import { ChatOpenAI } from '@langchain/openai';
+
+const WeatherReportSchema = z.object({
+  location: z.string(),
+  temperature: z.number(),
+  conditions: z.string(),
+  summary: z.string()
+});
+
+const model = new ChatOpenAI({
+  modelName: 'gpt-4o'
+}).withStructuredOutput(WeatherReportSchema);
+
+const report = await model.invoke(
+  'Generate a weather report for London, UK. Make it rainy and 45°F.'
+);
+
+console.log(report);
+```
+
+Structured outputs are captured in the span as JSON.
+
+## Configuration options
+
+The `ZeroEvalCallbackHandler` accepts the following options:
+
+```typescript
+const handler = new ZeroEvalCallbackHandler({
+  debug: false,                // Enable debug logging
+  excludeMetadataProps: /^(l[sc]_|langgraph_|__pregel_|checkpoint_ns)/, // Regex to exclude metadata keys
+  maxConcurrentSpans: 1000,    // Max concurrent spans (prevents memory issues)
+  spanCleanupIntervalMs: 60000 // Cleanup orphaned spans every 60s
+});
+```
+
+### Debug mode
+
+Enable `debug: true` to add `runId` and `parentRunId` to span attributes for troubleshooting:
+
+```typescript
+setGlobalCallbackHandler(new ZeroEvalCallbackHandler({ debug: true }));
+```
+
+### Metadata filtering
+
+By default, LangChain/LangGraph internal metadata properties (like `ls_`, `langgraph_`, `__pregel_`) are excluded from spans. Customize this with `excludeMetadataProps`:
+
+```typescript
+const handler = new ZeroEvalCallbackHandler({
+  excludeMetadataProps: /^internal_/
+});
+```
+
+### Span cleanup
+
+The handler automatically cleans up orphaned spans (spans that haven't ended after 5 minutes). Adjust the cleanup interval:
+
+```typescript
+const handler = new ZeroEvalCallbackHandler({
+  spanCleanupIntervalMs: 120000 // Check every 2 minutes
+});
+```
+
+## Token usage and throughput
+
+The handler extracts token usage from LLM responses and calculates throughput:
+
+- **Token usage:** Set as `inputTokens` and `outputTokens` span attributes
+- **Throughput:** Calculated as tokens per second after span ends
+- **Latency:** Duration is tracked automatically
+
+These metrics are compatible with the ZeroEval UI for filtering and analysis.
+
+## Error handling
+
+Errors in LLM calls, chains, tools, and retrievers are automatically captured:
+
+```typescript
+try {
+  await model.invoke('This will fail', {
+    callbacks: [new ZeroEvalCallbackHandler()]
+  });
+} catch (error) {
+  // Error is traced with message and span marked as failed
+  console.error(error);
+}
+```
+
+## Performance considerations
+
+The callback handler is optimized for production use:
+
+- **Object pooling:** Reuses metadata objects to reduce allocations
+- **Lazy serialization:** Delays JSON stringification until needed
+- **Cached regex:** Compiles metadata filters once
+- **Concurrent span limit:** Prevents memory exhaustion in long-running workflows
+- **Automatic cleanup:** Orphaned spans are cleaned up periodically
+
+## API reference
+
+### `ZeroEvalCallbackHandler`
+
+Callback handler for LangChain and LangGraph tracing.
+
+**Constructor:**
+
+```typescript
+new ZeroEvalCallbackHandler(options?: {
+  debug?: boolean;
+  excludeMetadataProps?: RegExp;
+  maxConcurrentSpans?: number;
+  spanCleanupIntervalMs?: number;
+})
+```
+
+**Methods:**
+
+- `destroy()` - Cleanup handler and end all active spans
+
+### `setGlobalCallbackHandler(handler)`
+
+Sets a global callback handler for all LangChain operations.
+
+**Parameters:**
+
+- `handler` - Instance of `ZeroEvalCallbackHandler` or any `BaseCallbackHandler`
+
+### `getGlobalHandler()`
+
+Returns the current global callback handler, or `undefined` if not set.
+
+### `clearGlobalHandler()`
+
+Clears the global callback handler.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="OpenAI integration" href="/integrations/openai" />
+  <Card title="Vercel AI integration" href="/integrations/vercel-ai" />
+</CardGroup>

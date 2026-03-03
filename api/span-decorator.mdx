@@ -1,0 +1,196 @@
+---
+title: "span() Decorator"
+description: "Trace method execution with the span() decorator for automatic argument and return value capture"
+---
+
+The `span()` decorator provides automatic tracing for class methods and functions. It captures arguments, return values, and errors without manual instrumentation.
+
+## Usage
+
+You can use `span()` in two ways:
+
+1. **As a method decorator** - Annotate class methods with `@span()`
+2. **As a function wrapper** - Wrap standalone functions
+
+### Method Decorator
+
+Decorate class methods to automatically trace their execution:
+
+```typescript
+import { span } from 'zeroeval';
+
+class DocumentProcessor {
+  @span({ name: 'process-document' })
+  async processDocument(docId: string) {
+    // Your logic here
+    const result = await this.transform(docId);
+    return result;
+  }
+
+  @span({ 
+    name: 'transform',
+    tags: { operation: 'transform' },
+    attributes: { version: '2.0' }
+  })
+  async transform(docId: string) {
+    // Transformation logic
+    return { id: docId, processed: true };
+  }
+}
+```
+
+### Function Wrapper
+
+Wrap standalone functions for tracing:
+
+```typescript
+import { span } from 'zeroeval';
+
+const processData = span({ name: 'process-data' })(
+  async (data: string[]) => {
+    return data.map(d => d.toUpperCase());
+  }
+);
+```
+
+## Type Signature
+
+```typescript
+function span(
+  opts: SpanOptions
+): MethodDecorator & ((target: any, ...args: any[]) => any)
+```
+
+## Parameters
+
+<ParamField path="opts" type="SpanOptions" required>
+  Configuration options for the span
+</ParamField>
+
+### SpanOptions
+
+<ParamField path="name" type="string" required>
+  The name of the span. Used to identify this operation in your traces.
+</ParamField>
+
+<ParamField path="sessionId" type="string">
+  Optional session identifier to group related spans together.
+</ParamField>
+
+<ParamField path="sessionName" type="string">
+  Optional human-readable name for the session.
+</ParamField>
+
+<ParamField path="tags" type="Record<string, string>">
+  String key-value pairs for categorizing and filtering spans.
+  
+  ```typescript
+  tags: { environment: 'production', team: 'ml' }
+  ```
+</ParamField>
+
+<ParamField path="attributes" type="Record<string, unknown>">
+  Additional metadata to attach to the span. Accepts any JSON-serializable values.
+  
+  ```typescript
+  attributes: { userId: 123, retryCount: 2 }
+  ```
+</ParamField>
+
+<ParamField path="inputData" type="unknown">
+  Explicit input data to log. If not provided, function arguments are automatically captured and JSON-serialized.
+</ParamField>
+
+<ParamField path="outputData" type="unknown">
+  Explicit output data to log. If not provided, the return value is automatically captured and JSON-serialized.
+</ParamField>
+
+## Automatic Capture
+
+The decorator automatically captures:
+
+- **Arguments** - All function arguments are JSON-serialized (unless `inputData` is explicitly provided)
+- **Return values** - Function return values are JSON-serialized (unless `outputData` is explicitly provided)
+- **Errors** - Exceptions are captured with code, message, and stack trace
+- **Timing** - Start and end timestamps for the span
+
+### Error Handling
+
+When a decorated method throws an error, the span:
+
+1. Captures the error details (name, message, stack)
+2. Marks the span as failed
+3. Ends the span
+4. Re-throws the original error
+
+```typescript
+class DataService {
+  @span({ name: 'fetch-user' })
+  async fetchUser(id: string) {
+    if (!id) {
+      throw new Error('User ID required'); // Captured and re-thrown
+    }
+    return await db.users.findById(id);
+  }
+}
+```
+
+## Async and Sync Support
+
+The decorator works with both synchronous and asynchronous methods:
+
+```typescript
+class Calculator {
+  @span({ name: 'add' })
+  add(a: number, b: number) {
+    return a + b; // Sync method
+  }
+
+  @span({ name: 'fetch-and-add' })
+  async fetchAndAdd(a: number, b: number) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    return a + b; // Async method
+  }
+}
+```
+
+## Advanced Example
+
+Combine multiple spans with explicit input/output control:
+
+```typescript
+import { span } from 'zeroeval';
+
+class MLPipeline {
+  @span({ 
+    name: 'ml-inference',
+    sessionId: 'pipeline-123',
+    sessionName: 'Production Inference',
+    tags: { model: 'gpt-4', stage: 'production' },
+    attributes: { modelVersion: '1.2.0' }
+  })
+  async runInference(prompt: string) {
+    const result = await this.callModel(prompt);
+    return result;
+  }
+
+  @span({ 
+    name: 'model-call',
+    inputData: 'REDACTED', // Sensitive prompts
+    outputData: 'REDACTED' // Sensitive completions
+  })
+  private async callModel(prompt: string) {
+    // Model call logic
+    return { completion: 'response', tokens: 150 };
+  }
+}
+```
+
+<Note>
+  When `inputData` is not provided, all arguments are automatically serialized using `JSON.stringify()`. BigInts are converted to strings, and functions are represented as `[Function name]`.
+</Note>
+
+## Related
+
+- [withSpan()](/api/with-span) - Context-based tracing without decorators
+- [Tracer](/api/tracer) - Low-level span management

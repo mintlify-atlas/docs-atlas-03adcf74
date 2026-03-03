@@ -1,0 +1,100 @@
+---
+title: sendBulkSignals()
+description: Send multiple signals in a batch operation
+---
+
+Send multiple signals to different entities in a single batch operation for improved performance.
+
+## Signature
+
+```typescript
+async function sendBulkSignals(
+  signals: SignalCreate[]
+): Promise<void>
+```
+
+## Parameters
+
+<ParamField path="signals" type="SignalCreate[]" required>
+  Array of signal objects to send. Each signal must include:
+  - `entity_type`: Type of entity ('session' | 'trace' | 'span' | 'completion')
+  - `entity_id`: UUID of the entity
+  - `name`: Name of the signal
+  - `value`: Signal value (string, boolean, or number)
+  - `signal_type`: Optional signal type ('boolean' | 'numerical')
+</ParamField>
+
+## Returns
+
+A `Promise<void>` that resolves when all signals have been sent.
+
+## Examples
+
+### Send multiple signals to different entities
+
+```typescript
+import { sendBulkSignals } from 'zeroeval';
+
+await sendBulkSignals([
+  {
+    entity_type: 'trace',
+    entity_id: traceId,
+    name: 'api_calls_count',
+    value: 5,
+    signal_type: 'numerical'
+  },
+  {
+    entity_type: 'session',
+    entity_id: sessionId,
+    name: 'is_authenticated',
+    value: true,
+    signal_type: 'boolean'
+  }
+]);
+```
+
+### Send signals with auto-detected types
+
+```typescript
+import { sendBulkSignals } from 'zeroeval';
+
+await sendBulkSignals([
+  {
+    entity_type: 'trace',
+    entity_id: traceId,
+    name: 'execution_time',
+    value: 1234
+  },
+  {
+    entity_type: 'span',
+    entity_id: spanId,
+    name: 'success',
+    value: true
+  },
+  {
+    entity_type: 'session',
+    entity_id: sessionId,
+    name: 'user_type',
+    value: 'premium'
+  }
+]);
+```
+
+## Type Definitions
+
+```typescript
+interface SignalCreate {
+  entity_type: 'session' | 'trace' | 'span' | 'completion';
+  entity_id: string;
+  name: string;
+  value: string | boolean | number;
+  signal_type?: 'boolean' | 'numerical';
+}
+```
+
+## Related
+
+- [sendSignal()](/api/send-signal) - Send a single signal to a specific entity
+- [sendTraceSignal()](/api/send-trace-signal) - Send a signal to the current trace
+- [sendSessionSignal()](/api/send-session-signal) - Send a signal to the current session
+- [sendSpanSignal()](/api/send-span-signal) - Send a signal to the current span

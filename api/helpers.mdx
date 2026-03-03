@@ -1,0 +1,259 @@
+---
+title: Helper Functions
+description: Utility functions for working with spans, traces, and sessions
+---
+
+## Overview
+
+The helper functions provide convenient access to the current span context and enable you to attach tags to spans, traces, and sessions without direct access to the tracer.
+
+```typescript
+import { getCurrentSpan, setTag } from '@zeroeval/sdk';
+
+const span = getCurrentSpan();
+if (span) {
+  setTag(span, { userId: '123', environment: 'production' });
+}
+```
+
+## Functions
+
+### getCurrentSpan()
+
+Get the currently active span in the current async context.
+
+```typescript
+function getCurrentSpan(): Span | undefined
+```
+
+#### Returns
+
+<ResponseField name="span" type="Span | undefined">
+  The currently active span, or `undefined` if no span is active.
+</ResponseField>
+
+#### Example
+
+```typescript
+import { getCurrentSpan } from '@zeroeval/sdk';
+
+function logCurrentOperation() {
+  const span = getCurrentSpan();
+  if (span) {
+    console.log(`Current operation: ${span.name}`);
+    span.setIO({ timestamp: Date.now() });
+  }
+}
+```
+
+### getCurrentTrace()
+
+Get the trace ID of the currently active span.
+
+```typescript
+function getCurrentTrace(): string | undefined
+```
+
+#### Returns
+
+<ResponseField name="traceId" type="string | undefined">
+  The trace ID of the current span, or `undefined` if no span is active.
+</ResponseField>
+
+#### Example
+
+```typescript
+import { getCurrentTrace, setTag } from '@zeroeval/sdk';
+
+function tagCurrentTrace() {
+  const traceId = getCurrentTrace();
+  if (traceId) {
+    setTag(traceId, { marked_for_review: 'true' });
+  }
+}
+```
+
+### getCurrentSession()
+
+Get the session ID of the currently active span.
+
+```typescript
+function getCurrentSession(): string | undefined
+```
+
+#### Returns
+
+<ResponseField name="sessionId" type="string | undefined">
+  The session ID of the current span, or `undefined` if no span is active.
+</ResponseField>
+
+#### Example
+
+```typescript
+import { getCurrentSession, setTag } from '@zeroeval/sdk';
+
+function tagUserSession(userId: string) {
+  const sessionId = getCurrentSession();
+  if (sessionId) {
+    setTag(sessionId, { user_id: userId, session_type: 'chat' });
+  }
+}
+```
+
+### setTag()
+
+Attach tags to a span, trace, or session. Tags are key-value pairs used for filtering and categorizing in the ZeroEval dashboard.
+
+```typescript
+function setTag(
+  target: Span | string | undefined,
+  tags: Record<string, string>
+): void
+```
+
+#### Parameters
+
+<ParamField path="target" type="Span | string | undefined" required>
+  The target to tag. Can be:
+  - A `Span` instance - tags are added directly to the span
+  - A `string` (trace ID or session ID) - tags are added to all spans in that trace or session
+  - `undefined` - the operation is a no-op
+</ParamField>
+
+<ParamField path="tags" type="Record<string, string>" required>
+  The tags to add. Tags are key-value pairs where both keys and values must be strings.
+  
+  ```typescript
+  {
+    environment: "production",
+    version: "1.0.2",
+    user_tier: "premium"
+  }
+  ```
+</ParamField>
+
+#### Examples
+
+**Tag a span directly:**
+
+```typescript
+import { getCurrentSpan, setTag } from '@zeroeval/sdk';
+
+const span = getCurrentSpan();
+setTag(span, { 
+  environment: 'production',
+  feature_flag: 'new_ui_enabled'
+});
+```
+
+**Tag all spans in a trace:**
+
+```typescript
+import { getCurrentTrace, setTag } from '@zeroeval/sdk';
+
+const traceId = getCurrentTrace();
+if (traceId) {
+  setTag(traceId, { 
+    marked_for_review: 'true',
+    review_reason: 'high_latency'
+  });
+}
+```
+
+**Tag all spans in a session:**
+
+```typescript
+import { getCurrentSession, setTag } from '@zeroeval/sdk';
+
+const sessionId = getCurrentSession();
+if (sessionId) {
+  setTag(sessionId, {
+    user_id: 'user-123',
+    subscription: 'premium',
+    region: 'us-west-2'
+  });
+}
+```
+
+## Usage Patterns
+
+### Conditional tagging based on results
+
+```typescript
+import { getCurrentSpan, setTag } from '@zeroeval/sdk';
+
+function processRequest(data: any) {
+  const span = getCurrentSpan();
+  
+  const result = performOperation(data);
+  
+  if (span) {
+    if (result.success) {
+      setTag(span, { status: 'success' });
+    } else {
+      setTag(span, { 
+        status: 'failure',
+        error_type: result.errorType
+      });
+    }
+  }
+  
+  return result;
+}
+```
+
+### Tagging with user context
+
+```typescript
+import { getCurrentSession, setTag } from '@zeroeval/sdk';
+
+function authenticateUser(userId: string, role: string) {
+  const sessionId = getCurrentSession();
+  
+  if (sessionId) {
+    setTag(sessionId, {
+      user_id: userId,
+      user_role: role,
+      auth_method: 'oauth'
+    });
+  }
+}
+```
+
+### Tagging entire traces for analysis
+
+```typescript
+import { getCurrentTrace, setTag } from '@zeroeval/sdk';
+
+async function handleRequest(req: Request) {
+  const response = await processRequest(req);
+  
+  const traceId = getCurrentTrace();
+  if (traceId) {
+    setTag(traceId, {
+      http_method: req.method,
+      http_status: response.status.toString(),
+      endpoint: req.url
+    });
+  }
+  
+  return response;
+}
+```
+
+## Target Resolution
+
+When you pass a string to `setTag()`, the function uses the following heuristic to determine whether it's a trace ID or session ID:
+
+1. **Check active traces**: If the string matches an active trace ID, tags are applied to all spans in that trace
+2. **Assume session ID**: Otherwise, tags are applied to all spans with that session ID
+
+This means you don't need to explicitly specify whether you're tagging a trace or session—the function figures it out automatically.
+
+## Notes
+
+- All helper functions use the global `tracer` singleton internally
+- The `getCurrentSpan()` function uses AsyncLocalStorage to retrieve the current span context
+- Tags must have string values—use `JSON.stringify()` if you need to store complex values
+- Setting tags on a trace or session affects all spans, including those already buffered but not yet flushed
+- These functions are safe to call even when no span is active (they become no-ops)

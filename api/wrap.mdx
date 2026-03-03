@@ -1,0 +1,136 @@
+---
+title: wrap
+description: Automatically wrap AI clients with observability tracing
+---
+
+<RequestExample>
+```typescript OpenAI Client
+import { OpenAI } from 'openai';
+import * as ze from '@zeroeval/sdk';
+
+const openai = ze.wrap(new OpenAI());
+
+const completion = await openai.chat.completions.create({
+  model: 'gpt-4',
+  messages: [{ role: 'user', content: 'Hello!' }]
+});
+```
+
+```typescript Vercel AI SDK
+import * as ai from 'ai';
+import * as ze from '@zeroeval/sdk';
+
+const wrappedAI = ze.wrap(ai);
+
+const { text } = await wrappedAI.generateText({
+  model: openai('gpt-4'),
+  prompt: 'Hello!'
+});
+```
+</RequestExample>
+
+## Overview
+
+The `wrap()` function automatically detects your AI client type and applies the appropriate instrumentation wrapper. All API calls made through the wrapped client are automatically traced and sent to ZeroEval.
+
+If `ze.init()` hasn't been called and `ZEROEVAL_API_KEY` is set in your environment, the SDK will automatically initialize itself.
+
+## Type Signature
+
+```typescript
+function wrap<T extends object>(client: T): WrappedClient<T>
+```
+
+## Parameters
+
+<ParamField path="client" type="object" required>
+  The AI client instance to wrap. Currently supports:
+  - OpenAI clients (from `openai` package)
+  - Vercel AI SDK module (from `ai` package)
+
+  The function automatically detects which type you're passing.
+</ParamField>
+
+## Returns
+
+<ResponseField name="WrappedClient<T>" type="T & { __zeroeval_wrapped?: boolean }">
+  A wrapped version of your client that preserves all original type information and functionality while adding automatic tracing.
+</ResponseField>
+
+## Auto-Detection Logic
+
+`wrap()` uses runtime type detection to determine which wrapper to apply:
+
+1. **OpenAI Detection**: Checks for `chat.completions`, `embeddings.create`, and constructor name
+2. **Vercel AI Detection**: Checks for functions like `generateText`, `streamText`, `generateObject`, `embed`
+3. **Error on Unknown**: Throws a descriptive error if the client type isn't recognized
+
+## Type Preservation
+
+The wrapped client maintains full TypeScript type information from the original client. You can use it exactly as you would use the unwrapped version:
+
+```typescript
+import { OpenAI } from 'openai';
+import * as ze from '@zeroeval/sdk';
+
+const openai = ze.wrap(new OpenAI());
+
+// Full type completion and checking works
+const completion = await openai.chat.completions.create({
+  model: 'gpt-4',  // ✓ Type-checked
+  messages: [      // ✓ Type-checked
+    { role: 'user', content: 'Hello!' }
+  ]
+});
+
+// Return types are preserved
+const message = completion.choices[0].message.content; // ✓ string | null
+```
+
+## Double-Wrap Protection
+
+Calling `wrap()` multiple times on the same client is safe. The function detects already-wrapped clients and returns them without re-wrapping:
+
+```typescript
+const wrapped1 = ze.wrap(new OpenAI());
+const wrapped2 = ze.wrap(wrapped1); // Returns wrapped1, no double wrapping
+```
+
+## Error Handling
+
+If you pass an unsupported client type, `wrap()` throws an error with guidance:
+
+```typescript
+const unsupported = ze.wrap(someOtherClient);
+// Error: Unsupported client type. ze.wrap() currently supports:
+// - OpenAI clients (from 'openai' package)
+// - Vercel AI SDK (from 'ai' package)
+//
+// Received: SomeOtherClient
+//
+// Make sure you're passing a valid client instance, e.g.:
+//   const openai = ze.wrap(new OpenAI());
+//   const ai = ze.wrap(await import('ai'));
+```
+
+## Automatic Initialization
+
+If you haven't called `ze.init()` but have set `ZEROEVAL_API_KEY` in your environment, `wrap()` will automatically initialize the SDK:
+
+```typescript
+// .env
+ZEROEVAL_API_KEY=your-api-key
+
+// app.ts
+import * as ze from '@zeroeval/sdk';
+import { OpenAI } from 'openai';
+
+// No need to call ze.init()
+const openai = ze.wrap(new OpenAI());
+```
+
+## Related Functions
+
+- [`wrapOpenAI()`](/api/wrap-openai) - OpenAI-specific wrapper
+- [`wrapVercelAI()`](/api/wrap-vercel-ai) - Vercel AI SDK-specific wrapper
+- [`ze.init()`](/api/init) - SDK initialization

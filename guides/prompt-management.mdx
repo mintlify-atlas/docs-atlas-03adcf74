@@ -1,0 +1,262 @@
+---
+title: Prompt management
+description: Version, optimize, and manage prompts with the Prompt Library
+---
+
+The `prompt()` function integrates with ZeroEval's Prompt Library to enable version control, auto-optimization, and content-addressed storage for your LLM prompts.
+
+## Auto-optimization mode
+
+Provide a fallback prompt that automatically upgrades to optimized versions:
+
+```typescript
+import { prompt } from 'zeroeval';
+
+const systemPrompt = await prompt({
+  name: 'customer-support',
+  content: 'You are a helpful customer service assistant.'
+});
+```
+
+The SDK will:
+1. Check if an optimized version exists in the Prompt Library
+2. Use the optimized version if available
+3. Fall back to your provided content if no optimized version exists
+4. Register your fallback content for future optimization
+
+This allows you to hardcode default prompts while seamlessly using tuned versions in production.
+
+## Explicit mode
+
+Always use the provided content, bypassing auto-optimization:
+
+```typescript
+const systemPrompt = await prompt({
+  name: 'customer-support',
+  content: 'You are a helpful assistant.',
+  from: 'explicit'
+});
+```
+
+Use explicit mode when:
+- Testing new prompt variations locally
+- You want full control over the prompt content
+- Debugging issues with optimized versions
+
+## Latest mode
+
+Require an optimized version to exist:
+
+```typescript
+const systemPrompt = await prompt({
+  name: 'customer-support',
+  from: 'latest'
+});
+```
+
+This mode throws an error if no optimized version exists in the Prompt Library. Use it to ensure you're always using a reviewed and approved prompt version.
+
+## Version pinning
+
+Fetch a specific prompt version by its content hash:
+
+```typescript
+const systemPrompt = await prompt({
+  name: 'customer-support',
+  from: 'a3f8b2c1e5d4f7a9b8c2d1e4f6a7b9c8d2e5f1a3b4c7d8e9f2a1b3c4d5e6f7a8'
+});
+```
+
+The `from` parameter accepts a 64-character SHA-256 hash. This allows you to:
+- Pin specific prompt versions in production
+- Roll back to previous versions
+- A/B test different prompt variations
+
+<Note>
+Prompt versions are content-addressed using SHA-256 hashing. The same content will always produce the same hash, ensuring deterministic versioning.
+</Note>
+
+## Template variables
+
+Use `{{variable}}` syntax for dynamic content:
+
+```typescript
+const systemPrompt = await prompt({
+  name: 'support-agent',
+  content: 'You are a {{role}} assistant. Your specialty is {{specialty}}.',
+  variables: {
+    role: 'customer support',
+    specialty: 'handling returns and refunds'
+  }
+});
+```
+
+Variables are interpolated by the SDK before sending to the LLM. The variables are also captured in trace metadata for analysis.
+
+### Variable interpolation example
+
+```typescript
+// Template
+const template = await prompt({
+  name: 'translator',
+  content: 'Translate the following text to {{language}}:\n\n{{text}}',
+  variables: {
+    language: 'Spanish',
+    text: 'Hello, how are you?'
+  }
+});
+
+// Result: "Translate the following text to Spanish:\n\nHello, how are you?"
+```
+
+## Metadata decoration
+
+The SDK automatically decorates prompts with `<zeroeval>` metadata tags:
+
+```xml
+<zeroeval task="customer-support" prompt_version="3" content_hash="a3f8..." />
+You are a helpful customer service assistant.
+```
+
+This metadata enables:
+- Linking traces to specific prompt versions
+- Tracking which prompts are used in production
+- Analyzing prompt performance over time
+
+The metadata is invisible to the LLM but captured in traces.
+
+## Integration with OpenAI wrapper
+
+Prompts work seamlessly with the OpenAI integration:
+
+```typescript
+import { OpenAI } from 'openai';
+import { wrap, prompt } from 'zeroeval';
+
+const openai = wrap(new OpenAI());
+
+const systemPrompt = await prompt({
+  name: 'code-reviewer',
+  content: 'You are an expert code reviewer.'
+});
+
+const response = await openai.chat.completions.create({
+  model: 'gpt-4',
+  messages: [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: 'Review this function: ...' }
+  ]
+});
+```
+
+The wrapper automatically extracts prompt metadata from the `<zeroeval>` tags and attaches it to the trace.
+
+## Multi-prompt workflows
+
+Use different prompts for different stages:
+
+```typescript
+import { withSpan, prompt } from 'zeroeval';
+
+await withSpan({ name: 'content-pipeline' }, async () => {
+  // Stage 1: Summarize
+  const summarizerPrompt = await prompt({
+    name: 'summarizer',
+    content: 'You are a summarizer. Condense text to key points.'
+  });
+  
+  const summary = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [
+      { role: 'system', content: summarizerPrompt },
+      { role: 'user', content: longText }
+    ]
+  });
+  
+  // Stage 2: Translate
+  const translatorPrompt = await prompt({
+    name: 'translator',
+    content: 'Translate text to {{language}}.',
+    variables: { language: 'French' }
+  });
+  
+  const translation = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [
+      { role: 'system', content: translatorPrompt },
+      { role: 'user', content: summary.choices[0].message.content }
+    ]
+  });
+});
+```
+
+Each prompt is tracked separately, allowing you to optimize each stage independently.
+
+## Content-addressed storage
+
+Prompts are stored using SHA-256 content hashing:
+
+```typescript
+import { sha256Hex, normalizePromptText } from 'zeroeval/utils';
+
+const content = 'You are a helpful assistant.';
+const hash = await sha256Hex(normalizePromptText(content));
+// hash: 'a3f8b2c1e5d4f7a9b8c2d1e4f6a7b9c8d2e5f1a3b4c7d8e9f2a1b3c4d5e6f7a8'
+```
+
+This ensures:
+- **Immutability**: Same content always produces the same hash
+- **Deduplication**: Identical prompts are stored once
+- **Integrity**: Content cannot be modified without changing the hash
+
+## Error handling
+
+Handle missing prompts gracefully:
+
+```typescript
+import { prompt } from 'zeroeval';
+import { PromptNotFoundError } from 'zeroeval/errors';
+
+try {
+  const systemPrompt = await prompt({
+    name: 'my-prompt',
+    from: 'latest'
+  });
+} catch (error) {
+  if (error instanceof PromptNotFoundError) {
+    console.log('No optimized version exists yet');
+    // Use a hardcoded fallback
+  } else {
+    throw error;
+  }
+}
+```
+
+## Best practices
+
+<Steps>
+  <Step title="Start with auto-optimization">
+    Use auto-optimization mode during development. The SDK will register your prompts and allow optimization without code changes.
+  </Step>
+  
+  <Step title="Use meaningful names">
+    Name prompts based on their purpose (e.g., `customer-support`, `code-reviewer`) rather than implementation details.
+  </Step>
+  
+  <Step title="Pin versions in production">
+    For critical production workloads, pin specific prompt versions using content hashes to prevent unexpected changes.
+  </Step>
+  
+  <Step title="Leverage variables for reusability">
+    Use template variables to create flexible, reusable prompts rather than hardcoding values.
+  </Step>
+  
+  <Step title="Track prompt performance">
+    Combine prompts with feedback to measure and optimize prompt effectiveness over time.
+  </Step>
+</Steps>
+
+## Related resources
+
+- [Feedback](/guides/feedback) - Provide feedback for prompt optimization
+- [Streaming](/guides/streaming) - Use prompts with streaming requests

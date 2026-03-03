@@ -1,0 +1,329 @@
+---
+title: Span
+description: Represents a single unit of work in a distributed trace
+---
+
+## Overview
+
+A `Span` represents a single operation in your application, such as an API call, database query, or LLM completion. Spans can be nested to form traces that represent the full execution path of a request.
+
+You typically create spans using the `@span` decorator or `tracer.startSpan()`, but you can also instantiate the `Span` class directly.
+
+```typescript
+import { Span } from '@zeroeval/sdk';
+
+const span = new Span('my-operation');
+span.setIO({ input: 'data' }, { output: 'result' });
+span.end();
+```
+
+## Constructor
+
+```typescript
+new Span(name: string, traceId?: string)
+```
+
+### Parameters
+
+<ParamField path="name" type="string" required>
+  The name of the span (e.g., `"openai-completion"`, `"database-query"`).
+</ParamField>
+
+<ParamField path="traceId" type="string" optional>
+  The trace ID to associate with this span. If not provided, a new UUID is generated, making this span the root of a new trace.
+</ParamField>
+
+## Properties
+
+### Read-only Properties
+
+<ResponseField name="spanId" type="string">
+  Unique identifier for this span (UUID v4).
+</ResponseField>
+
+<ResponseField name="traceId" type="string">
+  The trace ID that groups related spans together.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The name of the span.
+</ResponseField>
+
+<ResponseField name="startTime" type="number">
+  Timestamp when the span was created (milliseconds since epoch).
+</ResponseField>
+
+### Mutable Properties
+
+<ResponseField name="parentId" type="string | undefined">
+  The span ID of the parent span, or `undefined` for root spans.
+</ResponseField>
+
+<ResponseField name="endTime" type="number | undefined">
+  Timestamp when the span ended (milliseconds since epoch), or `undefined` if the span is still active.
+</ResponseField>
+
+<ResponseField name="sessionId" type="string | undefined">
+  Session ID for grouping related traces across multiple requests.
+</ResponseField>
+
+<ResponseField name="sessionName" type="string | undefined">
+  Human-readable name for the session.
+</ResponseField>
+
+<ResponseField name="attributes" type="Record<string, unknown>">
+  Custom attributes for this span (e.g., `{ model: "gpt-4", temperature: 0.7 }`).
+</ResponseField>
+
+<ResponseField name="tags" type="Record<string, string>">
+  Tags for filtering and categorizing spans (e.g., `{ environment: "production" }`).
+</ResponseField>
+
+<ResponseField name="inputData" type="string | undefined">
+  The input data for this operation, stored as a JSON string.
+</ResponseField>
+
+<ResponseField name="outputData" type="string | undefined">
+  The output data for this operation, stored as a JSON string.
+</ResponseField>
+
+<ResponseField name="error" type="ErrorInfo | undefined">
+  Error information if the operation failed.
+  
+  ```typescript
+  interface ErrorInfo {
+    code?: string;
+    message?: string;
+    stack?: string;
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="status" type="'ok' | 'error'">
+  The status of the span. Defaults to `"ok"`, set to `"error"` when `setError()` is called.
+</ResponseField>
+
+<ResponseField name="signals" type="Record<string, Signal>">
+  Signals (metrics) attached to this span.
+  
+  ```typescript
+  interface Signal {
+    value: string | boolean | number;
+    type: 'boolean' | 'numerical';
+  }
+  ```
+</ResponseField>
+
+## Methods
+
+### end()
+
+Mark the span as completed by setting the end time.
+
+```typescript
+end(): void
+```
+
+**Example:**
+
+```typescript
+const span = new Span('operation');
+// ... do work ...
+span.end();
+```
+
+### setIO()
+
+Set the input and/or output data for this span. Values are automatically serialized to JSON if they are not already strings.
+
+```typescript
+setIO(input?: unknown, output?: unknown): void
+```
+
+#### Parameters
+
+<ParamField path="input" type="unknown" optional>
+  The input data for this operation. Can be any JSON-serializable value.
+</ParamField>
+
+<ParamField path="output" type="unknown" optional>
+  The output data for this operation. Can be any JSON-serializable value.
+</ParamField>
+
+**Example:**
+
+```typescript
+span.setIO(
+  { query: 'What is the weather?' },
+  { answer: 'The weather is sunny.' }
+);
+```
+
+### setError()
+
+Mark the span as failed and record error information. This automatically sets `status` to `"error"`.
+
+```typescript
+setError(info: ErrorInfo): void
+```
+
+#### Parameters
+
+<ParamField path="info" type="ErrorInfo" required>
+  Error information to record
+
+  <Expandable title="properties">
+    <ParamField path="code" type="string" optional>
+      Error code (e.g., `"ECONNREFUSED"`, `"ValidationError"`).
+    </ParamField>
+
+    <ParamField path="message" type="string" optional>
+      Error message.
+    </ParamField>
+
+    <ParamField path="stack" type="string" optional>
+      Stack trace.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Example:**
+
+```typescript
+try {
+  // ... operation ...
+} catch (error) {
+  span.setError({
+    message: error.message,
+    stack: error.stack
+  });
+}
+```
+
+### addSignal()
+
+Attach a signal (metric) to this span. Signals are used for tracking custom metrics like accuracy, latency, or cost.
+
+```typescript
+addSignal(
+  name: string,
+  value: string | boolean | number,
+  type?: 'boolean' | 'numerical'
+): void
+```
+
+#### Parameters
+
+<ParamField path="name" type="string" required>
+  The name of the signal (e.g., `"accuracy"`, `"cost"`).
+</ParamField>
+
+<ParamField path="value" type="string | boolean | number" required>
+  The value of the signal.
+</ParamField>
+
+<ParamField path="type" type="'boolean' | 'numerical'" optional>
+  The type of signal. If not provided, the type is auto-detected from the value.
+</ParamField>
+
+**Example:**
+
+```typescript
+span.addSignal('accuracy', 0.95, 'numerical');
+span.addSignal('is_cached', true, 'boolean');
+span.addSignal('model_version', 'v2.1'); // Type auto-detected
+```
+
+### durationMs
+
+Get the duration of the span in milliseconds.
+
+```typescript
+get durationMs(): number | undefined
+```
+
+**Returns:** The duration in milliseconds, or `undefined` if the span hasn't ended yet.
+
+**Example:**
+
+```typescript
+span.end();
+console.log(`Operation took ${span.durationMs}ms`);
+```
+
+### toJSON()
+
+Serialize the span to a JSON-compatible object for sending to the backend.
+
+```typescript
+toJSON(): Record<string, unknown>
+```
+
+**Example:**
+
+```typescript
+const json = span.toJSON();
+console.log(json);
+// {
+//   span_id: "...",
+//   trace_id: "...",
+//   name: "operation",
+//   start_time: "2024-03-03T12:00:00.000Z",
+//   end_time: "2024-03-03T12:00:01.000Z",
+//   duration_ms: 1000,
+//   ...
+// }
+```
+
+## Usage Patterns
+
+### Manual span creation
+
+```typescript
+import { tracer, Span } from '@zeroeval/sdk';
+
+const span = tracer.startSpan('my-operation');
+try {
+  const result = await doWork();
+  span.setIO({ input: 'data' }, { output: result });
+} catch (error) {
+  span.setError({
+    message: error.message,
+    stack: error.stack
+  });
+  throw error;
+} finally {
+  tracer.endSpan(span);
+}
+```
+
+### Adding metadata
+
+```typescript
+const span = tracer.startSpan('llm-completion', {
+  attributes: {
+    model: 'gpt-4',
+    temperature: 0.7,
+    max_tokens: 1000
+  },
+  tags: {
+    environment: 'production',
+    version: '1.0'
+  }
+});
+```
+
+### Tracking custom metrics
+
+```typescript
+span.addSignal('token_count', 150, 'numerical');
+span.addSignal('cache_hit', true, 'boolean');
+span.addSignal('cost_usd', 0.003, 'numerical');
+```
+
+## Notes
+
+- Spans are automatically linked to their parent via `parentId` when created with `tracer.startSpan()`
+- The `inputData` and `outputData` fields are stored as JSON strings internally
+- Signals support auto-type detection: booleans, numbers, and string representations of numbers are automatically typed
+- Span IDs and trace IDs are UUID v4 strings

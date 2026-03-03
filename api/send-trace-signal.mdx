@@ -1,0 +1,109 @@
+---
+title: sendTraceSignal()
+description: Send a signal to the current trace
+---
+
+Send a signal to the current active trace. This is a convenience function that automatically determines the trace ID from the current execution context.
+
+## Signature
+
+```typescript
+function sendTraceSignal(
+  name: string,
+  value: string | boolean | number,
+  signalType?: 'boolean' | 'numerical'
+): void
+```
+
+## Parameters
+
+<ParamField path="name" type="string" required>
+  Name of the signal.
+</ParamField>
+
+<ParamField path="value" type="string | boolean | number" required>
+  Value of the signal. Can be a string, boolean, or number.
+</ParamField>
+
+<ParamField path="signalType" type="'boolean' | 'numerical'" optional>
+  Optional signal type. If not provided, the type will be auto-detected based on the value.
+</ParamField>
+
+## Returns
+
+`void` - The signal is queued and will be sent when the trace is flushed.
+
+## Behavior
+
+- If no active span/trace is found, a warning is logged and the signal is not sent
+- The signal is added to pending trace signals and will be sent when the trace completes
+- This function is synchronous and does not block execution
+
+## Examples
+
+### Send a signal to the current trace
+
+```typescript
+import { sendTraceSignal, span } from 'zeroeval';
+
+@span()
+async function processUser(userId: string) {
+  // Send a signal to the trace
+  sendTraceSignal('processing_type', 'user');
+  
+  // Process user...
+  return { userId };
+}
+```
+
+### Send numerical trace signals
+
+```typescript
+import { sendTraceSignal, tracer } from 'zeroeval';
+
+async function processData(data: any[]) {
+  const rootSpan = tracer.startSpan('processData');
+  
+  try {
+    sendTraceSignal('data_size', data.length);
+    sendTraceSignal('has_data', data.length > 0);
+    
+    // Process data...
+  } finally {
+    tracer.endSpan(rootSpan);
+  }
+}
+```
+
+### Track trace-level metrics
+
+```typescript
+import { sendTraceSignal, tracer } from 'zeroeval';
+
+async function analyzeWorkflow() {
+  const span = tracer.startSpan('workflow');
+  
+  try {
+    let apiCalls = 0;
+    
+    // Make multiple API calls
+    for (let i = 0; i < 5; i++) {
+      await makeApiCall();
+      apiCalls++;
+    }
+    
+    // Track total API calls at trace level
+    sendTraceSignal('api_calls_count', apiCalls);
+    sendTraceSignal('workflow_complete', true);
+  } finally {
+    tracer.endSpan(span);
+  }
+}
+```
+
+## Related
+
+- [sendSignal()](/api/send-signal) - Send a signal to a specific entity
+- [sendSessionSignal()](/api/send-session-signal) - Send a signal to the current session
+- [sendSpanSignal()](/api/send-span-signal) - Send a signal to the current span
+- [sendBulkSignals()](/api/send-bulk-signals) - Send multiple signals in a batch

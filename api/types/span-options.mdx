@@ -1,0 +1,139 @@
+---
+title: SpanOptions
+description: Configuration options for creating spans with the @span decorator or withSpan function
+---
+
+## Overview
+
+`SpanOptions` defines the configuration for creating spans in ZeroEval. You use this interface when applying the `@span` decorator to methods or when wrapping functions with `withSpan()`.
+
+## Type Definition
+
+```typescript
+interface SpanOptions {
+  name: string;
+  sessionId?: string;
+  sessionName?: string;
+  tags?: Record<string, string>;
+  attributes?: Record<string, unknown>;
+  inputData?: unknown;
+  outputData?: unknown;
+}
+```
+
+## Properties
+
+<ResponseField name="name" type="string" required>
+  The name of the span. This identifies the operation being traced and appears in your ZeroEval dashboard.
+</ResponseField>
+
+<ResponseField name="sessionId" type="string">
+  Optional session identifier to group related spans together. Use this to track multi-turn conversations or user sessions.
+</ResponseField>
+
+<ResponseField name="sessionName" type="string">
+  Optional human-readable name for the session. Helps identify sessions in the dashboard.
+</ResponseField>
+
+<ResponseField name="tags" type="Record<string, string>">
+  Optional key-value pairs for categorizing and filtering spans. Tags must be strings and are useful for grouping related operations.
+</ResponseField>
+
+<ResponseField name="attributes" type="Record<string, unknown>">
+  Optional arbitrary metadata to attach to the span. You can store any JSON-serializable data here for additional context.
+</ResponseField>
+
+<ResponseField name="inputData" type="unknown">
+  Optional explicit input data for the span. If not provided, the decorator automatically captures function arguments.
+</ResponseField>
+
+<ResponseField name="outputData" type="unknown">
+  Optional explicit output data for the span. If not provided, the decorator automatically captures the return value.
+</ResponseField>
+
+## Usage Examples
+
+### Basic Span Decorator
+
+```typescript
+import { span } from 'zeroeval';
+
+class AIService {
+  @span({ name: 'generate-response' })
+  async generateResponse(prompt: string): Promise<string> {
+    // Your logic here
+    return 'Generated response';
+  }
+}
+```
+
+### Span with Session Tracking
+
+```typescript
+@span({
+  name: 'chat-turn',
+  sessionId: 'user-123',
+  sessionName: 'Customer Support Chat'
+})
+async handleChatMessage(message: string): Promise<string> {
+  // Process message
+  return response;
+}
+```
+
+### Span with Tags and Attributes
+
+```typescript
+@span({
+  name: 'classify-intent',
+  tags: {
+    model: 'gpt-4',
+    environment: 'production'
+  },
+  attributes: {
+    maxTokens: 100,
+    temperature: 0.7
+  }
+})
+async classifyIntent(text: string): Promise<string> {
+  // Classification logic
+  return intent;
+}
+```
+
+### Explicit Input/Output Data
+
+```typescript
+@span({
+  name: 'process-data',
+  inputData: { source: 'user-upload' },
+  outputData: { status: 'success' }
+})
+async processData(file: File): Promise<void> {
+  // Process file
+}
+```
+
+### Using withSpan Function Wrapper
+
+```typescript
+import { withSpan } from 'zeroeval';
+
+const result = await withSpan(
+  {
+    name: 'fetch-user-data',
+    tags: { userId: '123' },
+    attributes: { cached: false }
+  },
+  async () => {
+    // Your async operation
+    return await fetchUserData();
+  }
+);
+```
+
+## Related
+
+- [span decorator](/api/span-decorator)
+- [withSpan function](/api/with-span)
+- [Session tracking](/concepts/sessions)

@@ -1,0 +1,428 @@
+---
+title: Spans
+description: Understand span structure, lifecycle, and how to capture input/output, errors, and signals
+---
+
+A span represents a single unit of work within a trace. Each span captures timing, relationships, metadata, and observability signals.
+
+## Span structure
+
+Every span contains:
+
+- **Identity**: `spanId`, `traceId`, `parentId`
+- **Timing**: `startTime`, `endTime`, `durationMs`
+- **Context**: `sessionId`, `sessionName`
+- **Metadata**: `attributes`, `tags`, `traceTags`, `sessionTags`
+- **Data**: `inputData`, `outputData`
+- **Status**: `status` ('ok' or 'error'), `error` object
+- **Signals**: `signals` (metrics and flags)
+
+Relevant code: [Span.ts:10-37](/home/daytona/workspace/source/src/observability/Span.ts:10-37)
+
+## Creating spans
+
+### Using withSpan (recommended)
+
+The `withSpan` helper provides automatic lifecycle management:
+
+```typescript
+import { withSpan } from 'zeroeval';
+
+await withSpan({ 
+  name: 'fetchUserData',
+  attributes: { userId: '123' },
+  tags: { source: 'api' }
+}, async () => {
+  const user = await db.users.findById('123');
+  return user;
+});
+```
+
+### Using the @span decorator
+
+Decorate methods to automatically create spans:
+
+```typescript
+import { span } from 'zeroeval';
+
+class OrderService {
+  @span({ name: 'createOrder' })
+  async createOrder(userId: string, items: any[]) {
+    // Span automatically captures arguments and return value
+    return await db.orders.create({ userId, items });
+  }
+}
+```
+
+Relevant code: [spanDecorator.ts:14-102](/home/daytona/workspace/source/src/observability/spanDecorator.ts:14-102)
+
+### Manual span management
+
+For fine-grained control:
+
+```typescript
+import { tracer } from 'zeroeval';
+
+const span = tracer.startSpan('complexOperation', {
+  sessionId: 'session-123',
+  tags: { priority: 'high' }
+});
+
+try {
+  // Your operation
+  const result = await doWork();
+  span.setIO({ input: 'data' }, result);
+} catch (error) {
+  span.setError({
+    code: error.name,
+    message: error.message,
+    stack: error.stack
+  });
+  throw error;
+} finally {
+  tracer.endSpan(span);
+}
+```
+
+## Identifiers
+
+### Span ID
+
+Each span has a unique UUID (`spanId`) generated automatically:
+
+```typescript
+const span = tracer.startSpan('operation');
+console.log(span.spanId); // e.g., "a3bb189e-8bf9-4558-9c0d-7f4e8a24e3f2"
+```
+
+### Trace ID
+
+All spans in the same trace share a `traceId`:
+
+```typescript
+await withSpan({ name: 'root' }, async () => {
+  const rootSpan = tracer.currentSpan();
+  const rootTraceId = rootSpan?.traceId;
+  
+  await withSpan({ name: 'child' }, async () => {
+    const childSpan = tracer.currentSpan();
+    // childSpan.traceId === rootTraceId
+  });
+});
+```
+
+### Parent ID
+
+Child spans reference their parent via `parentId`:
+
+```typescript
+await withSpan({ name: 'parent' }, async () => {
+  const parentSpan = tracer.currentSpan();
+  
+  await withSpan({ name: 'child' }, async () => {
+    const childSpan = tracer.currentSpan();
+    // childSpan.parentId === parentSpan.spanId
+  });
+});
+```
+
+Relevant code: [Tracer.ts:106-123](/home/daytona/workspace/source/src/observability/Tracer.ts:106-123)
+
+## Timing
+
+### Automatic timing
+
+Spans automatically record start and end times:
+
+```typescript
+const span = tracer.startSpan('operation');
+span.startTime; // Timestamp when span was created
+
+await doWork();
+
+tracer.endSpan(span);
+span.endTime; // Timestamp when span ended
+span.durationMs; // Calculated duration in milliseconds
+```
+
+### Duration calculation
+
+The `durationMs` property is computed from start and end times:
+
+```typescript
+const span = tracer.startSpan('operation');
+await new Promise(resolve => setTimeout(resolve, 100));
+tracer.endSpan(span);
+
+console.log(span.durationMs); // ~100
+```
+
+Relevant code: [Span.ts:16-17, 39-45](/home/daytona/workspace/source/src/observability/Span.ts:16-17)
+
+## Capturing input and output
+
+### Automatic capture with decorator
+
+The `@span` decorator automatically captures function arguments and return values:
+
+```typescript
+class DataService {
+  @span({ name: 'processData' })
+  async processData(input: { items: string[] }) {
+    // Arguments automatically captured as inputData
+    const result = { processed: input.items.length };
+    // Return value automatically captured as outputData
+    return result;
+  }
+}
+```
+
+### Manual capture
+
+```typescript
+const span = tracer.startSpan('operation');
+
+const input = { query: 'search term' };
+const output = await search(input);
+
+span.setIO(input, output);
+tracer.endSpan(span);
+```
+
+### Data serialization
+
+Input and output are automatically serialized to JSON:
+
+- String values are stored as-is
+- Objects and arrays are stringified with `JSON.stringify()`
+- BigInts are converted to strings
+- Functions are represented as `[Function name]`
+
+Relevant code: [Span.ts:52-61](/home/daytona/workspace/source/src/observability/Span.ts:52-61)
+
+## Error handling
+
+### Automatic error capture
+
+The `withSpan` helper automatically captures errors:
+
+```typescript
+await withSpan({ name: 'riskyOperation' }, async () => {
+  throw new Error('Something went wrong');
+  // Error is automatically captured with code, message, and stack
+});
+```
+
+### Manual error capture
+
+```typescript
+const span = tracer.startSpan('operation');
+
+try {
+  await riskyWork();
+} catch (error) {
+  span.setError({
+    code: error.name,        // e.g., "TypeError"
+    message: error.message,  // Error message
+    stack: error.stack       // Stack trace
+  });
+  throw error;
+} finally {
+  tracer.endSpan(span);
+}
+```
+
+### Status field
+
+Spans have a `status` field that indicates success or failure:
+
+```typescript
+const span = tracer.startSpan('operation');
+span.status; // 'ok' by default
+
+span.setError({ message: 'Failed' });
+span.status; // 'error' after setError() is called
+```
+
+Relevant code: [Span.ts:47-50](/home/daytona/workspace/source/src/observability/Span.ts:47-50)
+
+## Metadata
+
+### Attributes
+
+Attributes are arbitrary key-value pairs for structured data:
+
+```typescript
+const span = tracer.startSpan('query', {
+  attributes: {
+    database: 'postgres',
+    table: 'users',
+    queryType: 'select',
+    rowCount: 42
+  }
+});
+
+// Or add after creation
+span.attributes.cacheHit = true;
+```
+
+### Tags
+
+Tags are string key-value pairs used for filtering and grouping:
+
+```typescript
+const span = tracer.startSpan('operation', {
+  tags: {
+    environment: 'production',
+    region: 'us-west-2',
+    version: '1.2.3'
+  }
+});
+```
+
+Tags are inherited from parent spans and can be added to entire traces:
+
+```typescript
+const currentSpan = tracer.currentSpan();
+if (currentSpan) {
+  // Add tags to all spans in this trace
+  tracer.addTraceTags(currentSpan.traceId, {
+    userId: 'user-123',
+    outcome: 'success'
+  });
+}
+```
+
+Relevant code: [Span.ts:22-25](/home/daytona/workspace/source/src/observability/Span.ts:22-25)
+
+## Signals
+
+Spans can include boolean, numerical, or string signals for metrics:
+
+```typescript
+const span = tracer.startSpan('processOrder');
+
+// Add signals to track metrics
+span.addSignal('itemCount', 5);           // numerical
+span.addSignal('isPremiumUser', true);    // boolean
+span.addSignal('paymentMethod', 'card');  // auto-detected
+
+tracer.endSpan(span);
+```
+
+Relevant code: [Span.ts:63-92](/home/daytona/workspace/source/src/observability/Span.ts:63-92)
+
+See [Signals](/concepts/signals) for more details.
+
+## Serialization
+
+Spans are serialized to JSON when flushed to the backend:
+
+```typescript
+const span = tracer.startSpan('operation');
+tracer.endSpan(span);
+
+const json = span.toJSON();
+// {
+//   span_id: "a3bb189e-8bf9-4558-9c0d-7f4e8a24e3f2",
+//   trace_id: "b7cc290f-9cg0-5669-0d1e-8g5f9b35f4g3",
+//   parent_id: "c8dd301g-0dh1-6770-1e2f-9h6g0c46g5h4",
+//   name: "operation",
+//   start_time: "2024-03-15T10:30:00.000Z",
+//   end_time: "2024-03-15T10:30:01.234Z",
+//   duration_ms: 1234,
+//   status: "ok",
+//   attributes: {},
+//   tags: {},
+//   signals: {}
+// }
+```
+
+Relevant code: [Span.ts:94-117](/home/daytona/workspace/source/src/observability/Span.ts:94-117)
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use withSpan for simple cases">
+    The `withSpan` helper handles lifecycle and errors automatically:
+    
+    ```typescript
+    // Preferred
+    await withSpan({ name: 'operation' }, async () => {
+      return await doWork();
+    });
+    
+    // Instead of manual management
+    const span = tracer.startSpan('operation');
+    try {
+      const result = await doWork();
+      tracer.endSpan(span);
+      return result;
+    } catch (error) {
+      span.setError(error);
+      tracer.endSpan(span);
+      throw error;
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Always end spans">
+    If using manual span management, always end spans in a finally block:
+    
+    ```typescript
+    const span = tracer.startSpan('operation');
+    try {
+      await doWork();
+    } finally {
+      tracer.endSpan(span); // Always executed
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use attributes for structured data">
+    Store queryable data in attributes, not tags:
+    
+    ```typescript
+    // Good - structured data in attributes
+    const span = tracer.startSpan('query', {
+      attributes: {
+        rowCount: 42,
+        duration: 123.45,
+        cacheHit: true
+      }
+    });
+    
+    // Tags for categorical filtering
+    const span = tracer.startSpan('query', {
+      tags: {
+        database: 'postgres',
+        environment: 'prod'
+      }
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Capture meaningful input/output">
+    Don't capture excessive data:
+    
+    ```typescript
+    // Good - capture essential data
+    span.setIO(
+      { userId: '123', action: 'update' },
+      { success: true, recordsUpdated: 5 }
+    );
+    
+    // Avoid - too much data
+    span.setIO(
+      { ...entireRequestObject },
+      { ...entireDatabaseResult }
+    );
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Related concepts
+
+- [Tracing](/concepts/tracing) - Learn about trace lifecycle and context
+- [Sessions](/concepts/sessions) - Group related traces together
+- [Signals](/concepts/signals) - Add metrics and flags to spans

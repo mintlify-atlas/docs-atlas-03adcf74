@@ -1,0 +1,322 @@
+---
+title: Prompt Types
+description: Type definitions for prompt management, versioning, and metadata in ZeroEval
+---
+
+## Overview
+
+ZeroEval provides type-safe prompt management with support for versioning, template variables, content hashing, and metadata. These types enable you to fetch, version, and track prompts throughout your application.
+
+## Type Definitions
+
+### PromptOptions
+
+```typescript
+interface PromptOptions {
+  name: string;
+  content?: string;
+  variables?: Record<string, string>;
+  from?: 'latest' | 'explicit' | string;
+}
+```
+
+### Prompt
+
+```typescript
+interface Prompt {
+  content: string;
+  version: number | null;
+  versionId: string | null;
+  taskId: string | null;
+  promptSlug: string | null;
+  tag: string | null;
+  isLatest: boolean;
+  model: string | null;
+  contentHash: string | null;
+  metadata: Record<string, unknown>;
+  source: 'server' | 'fallback';
+}
+```
+
+### PromptMetadata
+
+```typescript
+interface PromptMetadata {
+  task: string;
+  variables?: Record<string, string>;
+  prompt_slug?: string;
+  prompt_version?: number;
+  prompt_version_id?: string;
+  content_hash?: string;
+}
+```
+
+### PromptResponse
+
+```typescript
+interface PromptResponse {
+  prompt: string;
+  task_id: string | null;
+  version_id: string;
+  version: number;
+  tag: string | null;
+  is_latest: boolean;
+  content: string;
+  metadata: Record<string, unknown>;
+  model_id: string | null;
+  content_hash: string | null;
+  evaluation_type: 'binary' | 'scored' | null;
+  score_min: number | null;
+  score_max: number | null;
+  pass_threshold: number | null;
+  temperature: number | null;
+  created_by: string;
+  updated_by: string;
+  created_at: string;
+  updated_at: string;
+}
+```
+
+## PromptOptions Properties
+
+<ResponseField name="name" type="string" required>
+  The task name associated with the prompt. This identifies which prompt to fetch from ZeroEval.
+</ResponseField>
+
+<ResponseField name="content" type="string">
+  Raw prompt content. Used as fallback when the server version is unavailable, or as the explicit content when `from: 'explicit'`.
+</ResponseField>
+
+<ResponseField name="variables" type="Record<string, string>">
+  Template variables to interpolate into the prompt. Variables are replaced using `{{variable}}` syntax in the prompt content.
+</ResponseField>
+
+<ResponseField name="from" type="'latest' | 'explicit' | string">
+  Version control mode:
+  - `'latest'`: Fetch the latest version from the server (fails if none exists)
+  - `'explicit'`: Always use the provided `content` parameter (bypasses auto-optimization)
+  - `'<hash>'`: Fetch a specific version by its 64-character SHA-256 content hash
+  
+  Default: `'latest'`
+</ResponseField>
+
+## Prompt Properties
+
+<ResponseField name="content" type="string" required>
+  The prompt content with variables interpolated.
+</ResponseField>
+
+<ResponseField name="version" type="number | null">
+  The version number of the prompt.
+</ResponseField>
+
+<ResponseField name="versionId" type="string | null">
+  The unique identifier for this prompt version.
+</ResponseField>
+
+<ResponseField name="taskId" type="string | null">
+  The task UUID from the backend.
+</ResponseField>
+
+<ResponseField name="promptSlug" type="string | null">
+  The prompt slug identifier.
+</ResponseField>
+
+<ResponseField name="tag" type="string | null">
+  Optional tag associated with this prompt version.
+</ResponseField>
+
+<ResponseField name="isLatest" type="boolean" required>
+  Whether this is the latest version of the prompt.
+</ResponseField>
+
+<ResponseField name="model" type="string | null">
+  The model ID associated with this prompt.
+</ResponseField>
+
+<ResponseField name="contentHash" type="string | null">
+  SHA-256 hash of the prompt content for content-addressable versioning.
+</ResponseField>
+
+<ResponseField name="metadata" type="Record<string, unknown>" required>
+  Arbitrary metadata associated with the prompt.
+</ResponseField>
+
+<ResponseField name="source" type="'server' | 'fallback'" required>
+  Indicates whether the prompt was fetched from the server or is using fallback content.
+</ResponseField>
+
+## Usage Examples
+
+### Basic Prompt Fetch
+
+```typescript
+import { ze } from 'zeroeval';
+
+const prompt = await ze.prompt({
+  name: 'customer-support-greeting'
+});
+
+console.log(prompt.content);
+```
+
+### Prompt with Variables
+
+```typescript
+const prompt = await ze.prompt({
+  name: 'personalized-email',
+  variables: {
+    userName: 'Alice',
+    productName: 'ZeroEval',
+    discountCode: 'SAVE20'
+  }
+});
+
+// Prompt content: "Hi {{userName}}, try {{productName}} with code {{discountCode}}!"
+// Result: "Hi Alice, try ZeroEval with code SAVE20!"
+```
+
+### Explicit Mode (Bypass Versioning)
+
+```typescript
+const prompt = await ze.prompt({
+  name: 'test-prompt',
+  content: 'This is my explicit prompt content',
+  from: 'explicit'
+});
+
+// Always uses the provided content, no server fetch
+```
+
+### Fallback Content
+
+```typescript
+const prompt = await ze.prompt({
+  name: 'chat-greeting',
+  content: 'Hello! How can I help you today?',
+  from: 'latest'
+});
+
+// Tries to fetch from server
+// If server is unavailable or prompt doesn't exist, uses fallback content
+if (prompt.source === 'fallback') {
+  console.log('Using fallback prompt');
+}
+```
+
+### Fetch Specific Version by Hash
+
+```typescript
+const prompt = await ze.prompt({
+  name: 'production-prompt',
+  from: 'a3b2c1d4e5f6789012345678901234567890123456789012345678901234abcd'
+});
+
+// Fetches the exact version with this content hash
+```
+
+### Using Prompt Metadata
+
+```typescript
+const prompt = await ze.prompt({
+  name: 'sentiment-analysis',
+  variables: { text: 'This product is amazing!' }
+});
+
+console.log('Version:', prompt.version);
+console.log('Is Latest:', prompt.isLatest);
+console.log('Content Hash:', prompt.contentHash);
+console.log('Metadata:', prompt.metadata);
+```
+
+### Template Variable Interpolation
+
+```typescript
+const prompt = await ze.prompt({
+  name: 'sql-query-generator',
+  variables: {
+    tableName: 'users',
+    column: 'email',
+    condition: 'active = true'
+  }
+});
+
+// Prompt template: "SELECT {{column}} FROM {{tableName}} WHERE {{condition}}"
+// Result: "SELECT email FROM users WHERE active = true"
+```
+
+### Working with Prompt Versions
+
+```typescript
+// Fetch latest version
+const latestPrompt = await ze.prompt({
+  name: 'classification',
+  from: 'latest'
+});
+
+// Store the content hash for reproducibility
+const hash = latestPrompt.contentHash;
+
+// Later, fetch exact same version
+const samePrompt = await ze.prompt({
+  name: 'classification',
+  from: hash!
+});
+
+// Both prompts have identical content
+assert(latestPrompt.content === samePrompt.content);
+```
+
+## PromptMetadata
+
+Prompt metadata is embedded in decorated prompts using the format:
+```
+<zeroeval>{JSON}</zeroeval>{content}
+```
+
+This metadata tracks version information and template variables:
+
+```typescript
+const metadata: PromptMetadata = {
+  task: 'customer-greeting',
+  variables: { name: 'Alice' },
+  prompt_slug: 'greeting-v2',
+  prompt_version: 3,
+  prompt_version_id: 'version-uuid',
+  content_hash: 'sha256-hash'
+};
+```
+
+## PromptResponse
+
+The `PromptResponse` type represents the raw response from the ZeroEval backend. The SDK automatically transforms this into the `Prompt` type for easier consumption.
+
+Key fields:
+
+<ResponseField name="evaluation_type" type="'binary' | 'scored' | null">
+  The type of evaluation configured for this prompt:
+  - `'binary'`: Pass/fail evaluation
+  - `'scored'`: Numerical scoring
+  - `null`: No evaluation configured
+</ResponseField>
+
+<ResponseField name="score_min" type="number | null">
+  Minimum score for scored evaluations.
+</ResponseField>
+
+<ResponseField name="score_max" type="number | null">
+  Maximum score for scored evaluations.
+</ResponseField>
+
+<ResponseField name="pass_threshold" type="number | null">
+  Threshold score for passing evaluations.
+</ResponseField>
+
+<ResponseField name="temperature" type="number | null">
+  Suggested temperature parameter for LLM calls using this prompt.
+</ResponseField>
+
+## Related
+
+- [prompt()](/api/prompt)
+- [Prompt Management Guide](/guides/prompt-management)

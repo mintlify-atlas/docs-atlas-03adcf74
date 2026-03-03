@@ -1,0 +1,236 @@
+---
+title: Authentication
+description: Learn how to authenticate with the ZeroEval API
+---
+
+The ZeroEval SDK requires an API key to communicate with the ZeroEval platform. You can obtain your API key from the [ZeroEval dashboard](https://zeroeval.com).
+
+## Authentication methods
+
+There are two ways to provide your API key to the SDK:
+
+### Environment variable (recommended)
+
+Set the `ZEROEVAL_API_KEY` environment variable before running your application:
+
+```bash
+export ZEROEVAL_API_KEY=your_api_key_here
+```
+
+With this approach, the SDK auto-initializes on the first span:
+
+```typescript
+import * as ze from "zeroeval";
+import { OpenAI } from "openai";
+
+// No need to call ze.init() - it auto-initializes
+const openai = ze.wrap(new OpenAI());
+
+const completion = await openai.chat.completions.create({
+  model: "gpt-4o-mini",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+```
+
+<Note>
+  Auto-initialization happens when the first span is created and `ZEROEVAL_API_KEY` is present in the environment.
+</Note>
+
+### Programmatic initialization
+
+Alternatively, you can pass the API key directly when calling `ze.init()`:
+
+```typescript
+import * as ze from "zeroeval";
+
+ze.init({ apiKey: "your_api_key_here" });
+```
+
+<Warning>
+  Never hardcode your API key in source code that will be committed to version control. Use environment variables or a secrets management solution.
+</Warning>
+
+## Configuration options
+
+The `init()` function accepts several configuration options:
+
+```typescript
+import * as ze from "zeroeval";
+
+ze.init({
+  // Required: Your ZeroEval API key
+  apiKey: "your_api_key_here",
+  
+  // Optional: Custom API URL (defaults to https://api.zeroeval.com)
+  apiUrl: "https://api.zeroeval.com",
+  
+  // Optional: Workspace name (defaults to "Personal Workspace")
+  workspaceName: "My Production Workspace",
+  
+  // Optional: Flush interval in seconds (defaults to 10)
+  flushInterval: 5,
+  
+  // Optional: Maximum spans to buffer before flushing (defaults to 100)
+  maxSpans: 200,
+  
+  // Optional: Collect code details like file paths and line numbers (defaults to true)
+  collectCodeDetails: true,
+  
+  // Optional: Enable/disable specific integrations
+  integrations: {
+    openai: true,
+    vercelai: true,
+  },
+  
+  // Optional: Enable debug logging
+  debug: false,
+});
+```
+
+### Configuration details
+
+<AccordionGroup>
+  <Accordion title="apiKey" icon="key">
+    Your ZeroEval API key. Required unless set via `ZEROEVAL_API_KEY` environment variable.
+
+    **Type:** `string`
+
+    **Environment variable:** `ZEROEVAL_API_KEY`
+  </Accordion>
+
+  <Accordion title="apiUrl" icon="link">
+    The URL of the ZeroEval API endpoint. Only change this if you're using a self-hosted instance.
+
+    **Type:** `string`
+
+    **Default:** `"https://api.zeroeval.com"`
+
+    **Environment variable:** `ZEROEVAL_API_URL`
+  </Accordion>
+
+  <Accordion title="workspaceName" icon="folder">
+    The name of your workspace. This helps organize traces in the dashboard.
+
+    **Type:** `string`
+
+    **Default:** `"Personal Workspace"`
+
+    **Environment variable:** `ZEROEVAL_WORKSPACE_NAME`
+  </Accordion>
+
+  <Accordion title="flushInterval" icon="clock">
+    How often (in seconds) to flush buffered spans to the API.
+
+    **Type:** `number`
+
+    **Default:** `10` (seconds)
+  </Accordion>
+
+  <Accordion title="maxSpans" icon="layer-group">
+    Maximum number of spans to buffer before forcing a flush.
+
+    **Type:** `number`
+
+    **Default:** `100`
+  </Accordion>
+
+  <Accordion title="collectCodeDetails" icon="code">
+    Whether to collect code details like file paths and line numbers for spans.
+
+    **Type:** `boolean`
+
+    **Default:** `true`
+  </Accordion>
+
+  <Accordion title="debug" icon="bug">
+    Enable debug logging to see detailed SDK operation logs.
+
+    **Type:** `boolean`
+
+    **Default:** `false`
+
+    **Environment variable:** `ZEROEVAL_DEBUG` (set to `"true"`)
+  </Accordion>
+</AccordionGroup>
+
+## Environment variables reference
+
+Here's a complete list of environment variables the SDK recognizes:
+
+| Variable                    | Description                           | Required |
+|-----------------------------|---------------------------------------|----------|
+| `ZEROEVAL_API_KEY`          | Your ZeroEval API key                 | Yes      |
+| `ZEROEVAL_API_URL`          | Custom API endpoint URL               | No       |
+| `ZEROEVAL_WORKSPACE_NAME`   | Workspace identifier                  | No       |
+| `ZEROEVAL_DEBUG`            | Enable debug logging (`"true"`)       | No       |
+
+## Checking initialization status
+
+You can check whether the SDK has been initialized:
+
+```typescript
+import * as ze from "zeroeval";
+
+ze.init({ apiKey: "your_api_key_here" });
+
+if (ze.isInitialized()) {
+  console.log("SDK is ready to use");
+}
+```
+
+## Example: Using .env file
+
+Create a `.env` file in your project root:
+
+```bash .env
+ZEROEVAL_API_KEY=your_api_key_here
+ZEROEVAL_WORKSPACE_NAME=Production
+ZEROEVAL_DEBUG=false
+```
+
+Load it in your application (using `dotenv` package):
+
+```typescript
+import "dotenv/config";
+import * as ze from "zeroeval";
+
+// SDK auto-initializes from environment variables
+ze.init();
+```
+
+## Debug mode
+
+When troubleshooting, enable debug mode to see detailed logs:
+
+```typescript
+import * as ze from "zeroeval";
+
+ze.init({
+  apiKey: "your_api_key_here",
+  debug: true,
+});
+
+// You'll see logs like:
+// ZeroEval SDK Configuration:
+//   Workspace: Personal Workspace
+//   API Key: zer_****key
+//   API URL: https://api.zeroeval.com
+//   Debug Mode: true
+//   Flush Interval: 10s (default)
+//   Max Spans: 100 (default)
+```
+
+<Note>
+  In debug mode, API keys are automatically masked in logs (e.g., `zer_****key`) for security.
+</Note>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build your first traced application
+  </Card>
+  <Card title="Manual tracing" icon="code" href="/guides/manual-tracing">
+    Learn how to create custom spans
+  </Card>
+</CardGroup>

@@ -1,0 +1,305 @@
+---
+title: Feedback
+description: Send feedback on LLM completions for prompt optimization
+---
+
+The `sendFeedback()` API allows you to provide feedback on LLM completions, enabling continuous prompt improvement and optimization.
+
+## Basic usage
+
+Send feedback on a completion using its span ID:
+
+```typescript
+import { sendFeedback, getCurrentSpan } from 'zeroeval';
+
+// After getting a response from the LLM
+const spanId = getCurrentSpan()?.spanId;
+
+if (spanId) {
+  await sendFeedback({
+    promptSlug: 'customer-support',
+    completionId: spanId,
+    thumbsUp: true,
+    reason: 'Response was helpful and accurate'
+  });
+}
+```
+
+<Note>
+The `completionId` is the UUID of the span that generated the LLM completion. Use `getCurrentSpan()` to get the active span's ID.
+</Note>
+
+## Positive feedback
+
+Indicate successful completions:
+
+```typescript
+await sendFeedback({
+  promptSlug: 'code-reviewer',
+  completionId: spanId,
+  thumbsUp: true,
+  reason: 'Identified all the issues correctly'
+});
+```
+
+Positive feedback helps the optimization system understand what works well and reinforces effective prompt patterns.
+
+## Negative feedback
+
+Report problematic completions:
+
+```typescript
+await sendFeedback({
+  promptSlug: 'summarizer',
+  completionId: spanId,
+  thumbsUp: false,
+  reason: 'Summary was too verbose',
+  expectedOutput: 'A concise 2-3 sentence summary focusing on key points'
+});
+```
+
+Include `expectedOutput` to guide the optimization process toward desired outputs.
+
+## Feedback with metadata
+
+Add custom metadata for richer context:
+
+```typescript
+await sendFeedback({
+  promptSlug: 'translator',
+  completionId: spanId,
+  thumbsUp: false,
+  reason: 'Translation was too literal',
+  metadata: {
+    sourceLanguage: 'en',
+    targetLanguage: 'es',
+    domain: 'technical',
+    userExpertise: 'beginner'
+  }
+});
+```
+
+Metadata helps identify patterns in feedback and enables more targeted optimization.
+
+## Judge automation feedback
+
+Provide feedback on automated judge evaluations:
+
+```typescript
+await sendFeedback({
+  promptSlug: 'customer-support',
+  completionId: spanId,
+  thumbsUp: false,
+  judgeId: 'judge-automation-uuid',
+  reason: 'Judge incorrectly marked this as unhelpful'
+});
+```
+
+This helps improve the accuracy of automated evaluation systems.
+
+### Scored judge feedback
+
+For judges that return numerical scores:
+
+```typescript
+await sendFeedback({
+  promptSlug: 'content-quality',
+  completionId: spanId,
+  thumbsUp: false,
+  judgeId: 'quality-scorer-uuid',
+  expectedScore: 8.5,
+  scoreDirection: 'too_low',
+  reason: 'Judge gave 6.0, but content quality was clearly higher'
+});
+```
+
+## Integration with prompt workflow
+
+Combine prompts and feedback in your application:
+
+```typescript
+import { OpenAI } from 'openai';
+import { wrap, prompt, sendFeedback, getCurrentSpan } from 'zeroeval';
+
+const openai = wrap(new OpenAI());
+
+async function generateResponse(userQuery: string) {
+  // Get the prompt
+  const systemPrompt = await prompt({
+    name: 'customer-support',
+    content: 'You are a helpful customer service assistant.'
+  });
+  
+  // Generate completion
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userQuery }
+    ]
+  });
+  
+  const answer = response.choices[0].message.content;
+  
+  // Present to user and collect feedback
+  const userRating = await showToUserAndGetFeedback(answer);
+  
+  // Send feedback
+  const spanId = getCurrentSpan()?.spanId;
+  if (spanId) {
+    await sendFeedback({
+      promptSlug: 'customer-support',
+      completionId: spanId,
+      thumbsUp: userRating >= 4, // 1-5 star rating
+      reason: userRating < 4 ? 'User rated below 4 stars' : 'User satisfied',
+      metadata: { stars: userRating }
+    });
+  }
+  
+  return answer;
+}
+```
+
+## Async feedback collection
+
+Capture the span ID for later feedback submission:
+
+```typescript
+import { getCurrentSpan, sendFeedback } from 'zeroeval';
+
+// During LLM call
+const response = await openai.chat.completions.create({ /* ... */ });
+const spanId = getCurrentSpan()?.spanId;
+
+// Store for later
+await db.storeCompletion({
+  id: responseId,
+  content: response.choices[0].message.content,
+  spanId: spanId
+});
+
+// Later, when user provides feedback
+async function submitUserFeedback(responseId: string, isPositive: boolean) {
+  const completion = await db.getCompletion(responseId);
+  
+  await sendFeedback({
+    promptSlug: 'customer-support',
+    completionId: completion.spanId,
+    thumbsUp: isPositive
+  });
+}
+```
+
+## Feedback options
+
+All available options for `sendFeedback()`:
+
+```typescript
+interface SendFeedbackOptions {
+  promptSlug: string;           // Required: prompt identifier
+  completionId: string;         // Required: span UUID
+  thumbsUp: boolean;            // Required: positive or negative
+  reason?: string;              // Optional: explanation
+  expectedOutput?: string;      // Optional: desired output
+  metadata?: Record<string, unknown>; // Optional: custom data
+  judgeId?: string;             // Optional: judge automation ID
+  expectedScore?: number;       // Optional: for scored judges
+  scoreDirection?: 'too_high' | 'too_low'; // Optional: score direction
+}
+```
+
+## Error handling
+
+Handle feedback submission errors gracefully:
+
+```typescript
+import { sendFeedback } from 'zeroeval';
+import { PromptRequestError } from 'zeroeval/errors';
+
+try {
+  await sendFeedback({
+    promptSlug: 'my-prompt',
+    completionId: spanId,
+    thumbsUp: true
+  });
+} catch (error) {
+  if (error instanceof PromptRequestError) {
+    console.error('Feedback submission failed:', error.message);
+    // Log for retry or monitoring
+  } else {
+    throw error;
+  }
+}
+```
+
+<Tip>
+Feedback submission is non-blocking. If it fails, your application continues normally. Consider implementing retry logic for critical feedback.
+</Tip>
+
+## Best practices
+
+<Steps>
+  <Step title="Collect feedback early and often">
+    Integrate feedback collection at the point where users interact with LLM outputs for the most accurate signals.
+  </Step>
+  
+  <Step title="Provide context in reasons">
+    Specific reasons help identify patterns. Instead of "bad response", use "included deprecated API in code example".
+  </Step>
+  
+  <Step title="Use expectedOutput for negative feedback">
+    When giving negative feedback, include what the output should have been to guide optimization.
+  </Step>
+  
+  <Step title="Add rich metadata">
+    Include relevant context like user type, query category, or application state to enable sophisticated analysis.
+  </Step>
+  
+  <Step title="Don't block on feedback">
+    Submit feedback asynchronously to avoid impacting user experience if the API is slow or unavailable.
+  </Step>
+</Steps>
+
+## Programmatic feedback patterns
+
+Automate feedback collection based on downstream metrics:
+
+```typescript
+import { sendFeedback, getCurrentSpan } from 'zeroeval';
+
+async function processUserRequest(query: string) {
+  const response = await generateLLMResponse(query);
+  const spanId = getCurrentSpan()?.spanId;
+  
+  try {
+    // Attempt to execute the LLM's suggestion
+    const result = await executeAction(response.action);
+    
+    // Success = positive feedback
+    if (spanId) {
+      await sendFeedback({
+        promptSlug: 'action-generator',
+        completionId: spanId,
+        thumbsUp: true,
+        reason: 'Action executed successfully'
+      });
+    }
+  } catch (error) {
+    // Failure = negative feedback
+    if (spanId) {
+      await sendFeedback({
+        promptSlug: 'action-generator',
+        completionId: spanId,
+        thumbsUp: false,
+        reason: `Action failed: ${error.message}`,
+        expectedOutput: 'A valid, executable action'
+      });
+    }
+  }
+}
+```
+
+## Related resources
+
+- [Prompt management](/guides/prompt-management) - Version and optimize prompts
+- [Span decorator](/guides/span-decorator) - Capture span IDs automatically

@@ -1,0 +1,77 @@
+---
+title: sendSignal()
+description: Send a signal to a specific entity
+---
+
+Send a signal (boolean, numerical, or string metric) to a specific entity by its type and ID.
+
+## Signature
+
+```typescript
+async function sendSignal(
+  entityType: 'session' | 'trace' | 'span' | 'completion',
+  entityId: string,
+  name: string,
+  value: string | boolean | number,
+  signalType?: 'boolean' | 'numerical'
+): Promise<void>
+```
+
+## Parameters
+
+<ParamField path="entityType" type="'session' | 'trace' | 'span' | 'completion'" required>
+  Type of entity to send the signal to.
+</ParamField>
+
+<ParamField path="entityId" type="string" required>
+  UUID of the entity to send the signal to.
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Name of the signal.
+</ParamField>
+
+<ParamField path="value" type="string | boolean | number" required>
+  Value of the signal. Can be a string, boolean, or number.
+</ParamField>
+
+<ParamField path="signalType" type="'boolean' | 'numerical'" optional>
+  Optional signal type. If not provided, the type will be auto-detected based on the value.
+</ParamField>
+
+## Returns
+
+A `Promise<void>` that resolves when the signal has been sent.
+
+## Examples
+
+### Send a numerical signal to a trace
+
+```typescript
+import { sendSignal } from 'zeroeval';
+
+await sendSignal('trace', traceId, 'execution_time_ms', 1234);
+```
+
+### Send a boolean signal to a session
+
+```typescript
+import { sendSignal } from 'zeroeval';
+
+await sendSignal('session', sessionId, 'user_engagement_score', 0.85);
+```
+
+### Send a signal with explicit type
+
+```typescript
+import { sendSignal } from 'zeroeval';
+
+await sendSignal('span', spanId, 'cache_hit', true, 'boolean');
+```
+
+## Related
+
+- [sendBulkSignals()](/api/send-bulk-signals) - Send multiple signals in a single operation
+- [sendTraceSignal()](/api/send-trace-signal) - Send a signal to the current trace
+- [sendSessionSignal()](/api/send-session-signal) - Send a signal to the current session
+- [sendSpanSignal()](/api/send-span-signal) - Send a signal to the current span

@@ -1,0 +1,314 @@
+---
+title: wrapVercelAI
+description: Wrap Vercel AI SDK with automatic tracing
+---
+
+<RequestExample>
+```typescript generateText
+import * as ai from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { wrapVercelAI } from '@zeroeval/sdk';
+
+const wrappedAI = wrapVercelAI(ai);
+
+const { text } = await wrappedAI.generateText({
+  model: openai('gpt-4'),
+  prompt: 'Explain quantum computing'
+});
+```
+
+```typescript streamText
+import * as ai from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { wrapVercelAI } from '@zeroeval/sdk';
+
+const wrappedAI = wrapVercelAI(ai);
+
+const { textStream } = await wrappedAI.streamText({
+  model: openai('gpt-4'),
+  prompt: 'Write a story'
+});
+
+for await (const chunk of textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+```typescript generateObject
+import * as ai from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { wrapVercelAI } from '@zeroeval/sdk';
+import { z } from 'zod';
+
+const wrappedAI = wrapVercelAI(ai);
+
+const { object } = await wrappedAI.generateObject({
+  model: openai('gpt-4'),
+  schema: z.object({
+    name: z.string(),
+    age: z.number()
+  }),
+  prompt: 'Generate a random person'
+});
+```
+
+```typescript embed
+import * as ai from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { wrapVercelAI } from '@zeroeval/sdk';
+
+const wrappedAI = wrapVercelAI(ai);
+
+const { embedding } = await wrappedAI.embed({
+  model: openai.embedding('text-embedding-3-small'),
+  value: 'The quick brown fox'
+});
+```
+</RequestExample>
+
+## Overview
+
+`wrapVercelAI()` wraps the Vercel AI SDK module to automatically trace all AI operations. The wrapper intercepts SDK functions like `generateText`, `streamText`, `generateObject`, and `embed`, adding observability without changing your code.
+
+If `ze.init()` hasn't been called and `ZEROEVAL_API_KEY` is set in your environment, the SDK will automatically initialize itself.
+
+## Type Signature
+
+```typescript
+function wrapVercelAI<T extends Record<string, any>>(
+  aiModule: T
+): WrappedVercelAI<T>
+```
+
+## Parameters
+
+<ParamField path="aiModule" type="Record<string, any>" required>
+  The Vercel AI SDK module exports (typically `import * as ai from 'ai'`).
+</ParamField>
+
+## Returns
+
+<ResponseField name="WrappedVercelAI<T>" type="T & { __zeroeval_wrapped?: boolean }">
+  A wrapped version of the AI SDK with all supported functions instrumented for tracing.
+</ResponseField>
+
+## Traced Functions
+
+### Text Generation
+
+**Functions**: `generateText()`, `streamText()`
+
+Traces text generation with:
+- Input prompt or messages
+- Generated text output
+- Token usage metrics
+- Throughput calculation
+- Streaming metrics (latency to first token)
+- Tool call information
+
+### Object Generation
+
+**Functions**: `generateObject()`, `streamObject()`
+
+Traces structured object generation with:
+- Input prompt and schema
+- Generated object
+- Token usage metrics
+
+### Embeddings
+
+**Functions**: `embed()`, `embedMany()`
+
+Traces embedding generation with:
+- Input text
+- Number of embeddings generated
+- Token usage metrics
+
+### Additional Functions
+
+**Functions**: `generateImage()`, `transcribe()`, `generateSpeech()`
+
+Traces image generation, audio transcription, and speech synthesis operations.
+
+## Vercel AI SDK Integration
+
+The wrapper creates traced versions of SDK functions while preserving all original functionality:
+
+```typescript
+import * as ai from 'ai';
+import { wrapVercelAI } from '@zeroeval/sdk';
+
+const wrappedAI = wrapVercelAI(ai);
+
+// All these functions are traced:
+wrappedAI.generateText     // ✓ Traced
+wrappedAI.streamText       // ✓ Traced
+wrappedAI.generateObject   // ✓ Traced
+wrappedAI.streamObject     // ✓ Traced
+wrappedAI.embed            // ✓ Traced
+wrappedAI.embedMany        // ✓ Traced
+
+// Non-traced exports are passed through:
+wrappedAI.openai           // ✓ Available unchanged
+wrappedAI.anthropic        // ✓ Available unchanged
+```
+
+## Streaming Support
+
+The wrapper fully supports streaming responses from `streamText()` and `streamObject()`:
+
+```typescript
+const result = await wrappedAI.streamText({
+  model: openai('gpt-4'),
+  prompt: 'Write a story'
+});
+
+// Accessing textStream triggers wrapper
+for await (const chunk of result.textStream) {
+  // Chunks are traced as they arrive
+}
+// Span ends when stream completes
+```
+
+The wrapper intercepts stream access using a Proxy and tracks:
+- Time to first token (latency)
+- Chunk count
+- Full accumulated text
+- Token usage from stream metadata
+
+## Metadata Extraction
+
+The wrapper processes ZeroEval metadata embedded in prompts or system messages:
+
+```typescript
+const { text } = await wrappedAI.generateText({
+  model: openai('gpt-4'),
+  messages: [
+    {
+      role: 'system',
+      content: `
+<!--zeroeval
+task: summarization
+prompt_version_id: pv_xyz789
+variables:
+  max_length: 100
+-->
+Summarize the following in {{max_length}} words or less.
+      `
+    },
+    { role: 'user', content: 'Long article text...' }
+  ]
+});
+```
+
+The wrapper:
+1. Extracts metadata from HTML comments
+2. Interpolates template variables
+3. Removes metadata before passing to the AI SDK
+4. Attaches metadata to the trace span
+
+## Double-Wrap Protection
+
+Wrapping an already-wrapped module is safe and returns the existing wrapper:
+
+```typescript
+const wrapped1 = wrapVercelAI(ai);
+const wrapped2 = wrapVercelAI(wrapped1); // Returns wrapped1
+```
+
+## Error Tracing
+
+Errors from AI SDK operations are automatically captured:
+
+```typescript
+try {
+  await wrappedAI.generateText({
+    model: openai('invalid-model'),
+    prompt: 'Hello'
+  });
+} catch (error) {
+  // Error is traced with code, message, and stack
+}
+```
+
+## Span Attributes
+
+Each traced operation includes:
+
+<ResponseField name="service.name" type="string">
+  Set to `"vercel-ai-sdk"`
+</ResponseField>
+
+<ResponseField name="kind" type="string">
+  Operation kind: `"llm"`, `"embedding"`, `"image"`, `"speech"`, or `"transcription"`
+</ResponseField>
+
+<ResponseField name="provider" type="string">
+  Set to `"vercel-ai-sdk"`
+</ResponseField>
+
+<ResponseField name="model" type="string">
+  The model ID or provider-specific identifier
+</ResponseField>
+
+<ResponseField name="messages" type="array">
+  Messages array (for message-based generation)
+</ResponseField>
+
+<ResponseField name="streaming" type="boolean">
+  Set to `true` for `streamText()` and `streamObject()`
+</ResponseField>
+
+<ResponseField name="temperature" type="number">
+  Temperature parameter (if provided)
+</ResponseField>
+
+<ResponseField name="maxTokens" type="number">
+  Max tokens parameter (if provided)
+</ResponseField>
+
+<ResponseField name="maxSteps" type="number">
+  Max agent steps (if provided)
+</ResponseField>
+
+<ResponseField name="toolCount" type="number">
+  Number of tools provided
+</ResponseField>
+
+<ResponseField name="inputTokens" type="number">
+  Prompt tokens consumed
+</ResponseField>
+
+<ResponseField name="outputTokens" type="number">
+  Completion tokens generated
+</ResponseField>
+
+<ResponseField name="throughput" type="number">
+  Characters per second
+</ResponseField>
+
+<ResponseField name="latency" type="number">
+  Time to first token (streaming only)
+</ResponseField>
+
+<ResponseField name="chunkCount" type="number">
+  Number of chunks received (streaming only)
+</ResponseField>
+
+<ResponseField name="zeroeval" type="object">
+  Extracted ZeroEval metadata (task, prompt_version_id, variables)
+</ResponseField>
+
+## Supported Response Types
+
+The wrapper handles all Vercel AI SDK response types:
+
+- **Non-streaming**: Traces complete response with usage metrics
+- **Streaming**: Wraps `textStream` and `fullStream` iterators
+- **Object generation**: Captures structured output from schema validation
+- **Embeddings**: Records embedding count and dimensions
+
+## Related Functions
+
+- [`wrap()`](/api/wrap) - Auto-detect and wrap any supported client
+- [`wrapOpenAI()`](/api/wrap-openai) - OpenAI-specific wrapper

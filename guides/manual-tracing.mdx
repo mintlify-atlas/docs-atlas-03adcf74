@@ -1,0 +1,321 @@
+---
+title: Manual tracing
+description: Create and manage spans manually using the Tracer API
+---
+
+For cases where decorators aren't suitable, you can create and manage spans manually using the Tracer API. This gives you fine-grained control over span lifecycle and metadata.
+
+## Starting and ending spans
+
+Create spans using `tracer.startSpan()` and end them with `tracer.endSpan()`:
+
+```typescript
+import { tracer } from 'zeroeval';
+
+function processData(data: any[]) {
+  const span = tracer.startSpan('data.process', {
+    attributes: { recordCount: data.length }
+  });
+
+  try {
+    // Your processing logic
+    const result = data.map(item => transform(item));
+    
+    // Capture the result
+    span.setIO(
+      JSON.stringify({ recordCount: data.length }),
+      JSON.stringify({ processedCount: result.length })
+    );
+    
+    return result;
+  } catch (error: any) {
+    // Capture errors
+    span.setError({
+      code: error.name,
+      message: error.message,
+      stack: error.stack
+    });
+    throw error;
+  } finally {
+    // Always end the span
+    tracer.endSpan(span);
+  }
+}
+```
+
+<Note>
+Always end spans in a `finally` block to ensure they're closed even if an error occurs.
+</Note>
+
+## Using withSpan helper
+
+The `withSpan()` helper simplifies span management by automatically handling lifecycle:
+
+```typescript
+import { withSpan } from 'zeroeval';
+
+async function fetchUserData(userId: string) {
+  return withSpan(
+    { 
+      name: 'user.fetch',
+      tags: { userId },
+      inputData: { userId },
+    },
+    async () => {
+      const response = await fetch(`/api/users/${userId}`);
+      const data = await response.json();
+      return data;
+    }
+  );
+}
+```
+
+The helper automatically:
+- Starts the span before executing your function
+- Captures the return value as output
+- Handles errors and attaches them to the span
+- Ends the span in a finally block
+
+## Accessing the current span
+
+Get the currently active span to add metadata dynamically:
+
+```typescript
+import { tracer } from 'zeroeval';
+
+function processRequest(request: Request) {
+  const span = tracer.currentSpan();
+  
+  if (span) {
+    // Add metadata to the current span
+    span.attributes.requestPath = request.url;
+    span.attributes.method = request.method;
+  }
+  
+  // Process request
+}
+```
+
+This is useful when you're inside a traced function and want to add context without creating a new span.
+
+## Parent-child relationships
+
+Spans automatically form parent-child relationships based on AsyncLocalStorage context:
+
+```typescript
+import { withSpan } from 'zeroeval';
+
+async function parentOperation() {
+  return withSpan({ name: 'parent' }, async () => {
+    // This span will be a child of 'parent'
+    await withSpan({ name: 'child1' }, async () => {
+      await doWork();
+    });
+    
+    // This span will also be a child of 'parent'
+    await withSpan({ name: 'child2' }, async () => {
+      await doMoreWork();
+    });
+  });
+}
+```
+
+The SDK uses Node.js AsyncLocalStorage to maintain a span stack, so parent-child relationships are preserved even across async boundaries.
+
+## Adding tags and attributes
+
+Enrich spans with tags and attributes:
+
+```typescript
+const span = tracer.startSpan('api.request', {
+  tags: {
+    environment: 'production',
+    service: 'api-gateway'
+  },
+  attributes: {
+    endpoint: '/users',
+    method: 'GET',
+    authenticated: true
+  }
+});
+```
+
+You can also update them after creation:
+
+```typescript
+span.tags.user_type = 'premium';
+span.attributes.responseTime = 150;
+```
+
+## Setting input and output
+
+Capture the data flowing through your spans:
+
+```typescript
+const span = tracer.startSpan('transformer.apply');
+
+try {
+  const output = transform(input);
+  
+  // Set both input and output
+  span.setIO(
+    JSON.stringify(input),
+    JSON.stringify(output)
+  );
+  
+  return output;
+} finally {
+  tracer.endSpan(span);
+}
+```
+
+<Tip>
+The SDK automatically stringifies non-string values when using decorators, but with manual tracing you should stringify objects yourself for consistent formatting.
+</Tip>
+
+## Error handling
+
+Capture errors with full context:
+
+```typescript
+const span = tracer.startSpan('database.query');
+
+try {
+  const result = await db.query(sql);
+  span.setIO(sql, JSON.stringify(result));
+  return result;
+} catch (error: any) {
+  span.setError({
+    code: error.code || error.name,
+    message: error.message,
+    stack: error.stack
+  });
+  throw error;
+} finally {
+  tracer.endSpan(span);
+}
+```
+
+## Session management
+
+Group related operations into sessions:
+
+```typescript
+import { withSpan } from 'zeroeval';
+import { randomUUID } from 'crypto';
+
+async function handleUserWorkflow(userId: string) {
+  const sessionId = randomUUID();
+  
+  return withSpan(
+    { 
+      name: 'workflow.user-onboarding',
+      sessionId,
+      sessionName: 'User Onboarding'
+    },
+    async () => {
+      // All nested spans inherit the session ID
+      await createUserProfile(userId);
+      await sendWelcomeEmail(userId);
+      await assignDefaultSettings(userId);
+    }
+  );
+}
+```
+
+## Trace-level and session-level tags
+
+Add tags to all spans in a trace or session:
+
+```typescript
+import { tracer, getCurrentTrace } from 'zeroeval';
+
+function processRequest(req: Request) {
+  const traceId = getCurrentTrace();
+  
+  if (traceId) {
+    // Add tags to all spans in this trace
+    tracer.addTraceTags(traceId, {
+      user_id: req.userId,
+      region: req.region
+    });
+  }
+}
+```
+
+For session-level tags:
+
+```typescript
+const span = tracer.currentSpan();
+
+if (span?.sessionId) {
+  tracer.addSessionTags(span.sessionId, {
+    checkout_flow: 'v2',
+    ab_test_variant: 'control'
+  });
+}
+```
+
+## Flushing traces
+
+The SDK automatically flushes spans to the backend:
+- Every 10 seconds (configurable with `flushInterval`)
+- When the buffer reaches 100 spans (configurable with `maxSpans`)
+- During graceful shutdown
+
+To manually flush:
+
+```typescript
+import { tracer } from 'zeroeval';
+
+// Force immediate flush
+await tracer.flush();
+```
+
+For graceful shutdown:
+
+```typescript
+process.on('SIGTERM', () => {
+  tracer.shutdown(); // Flushes and tears down integrations
+  process.exit(0);
+});
+```
+
+## Configuration
+
+Configure the tracer during initialization:
+
+```typescript
+import { init } from 'zeroeval';
+
+init({
+  apiKey: process.env.ZEROEVAL_API_KEY,
+  flushInterval: 5,  // Flush every 5 seconds
+  maxSpans: 50,      // Flush when buffer reaches 50 spans
+});
+```
+
+## Best practices
+
+<Steps>
+  <Step title="Always use try-finally">
+    Ensure spans are ended even when errors occur by using `finally` blocks or the `withSpan()` helper.
+  </Step>
+  
+  <Step title="Avoid deeply nested manual spans">
+    For most use cases, prefer decorators or `withSpan()`. Use manual tracing only when you need fine-grained control.
+  </Step>
+  
+  <Step title="Don't forget to end spans">
+    Unended spans will remain in memory until the buffer is flushed or the process exits, potentially causing memory leaks.
+  </Step>
+  
+  <Step title="Use meaningful names">
+    Follow a consistent naming convention like `service.operation` to make traces easier to navigate.
+  </Step>
+</Steps>
+
+## Related resources
+
+- [Span decorator](/guides/span-decorator) - Automatic tracing with decorators
+- [Streaming](/guides/streaming) - Streaming request tracing

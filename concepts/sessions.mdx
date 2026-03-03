@@ -1,0 +1,369 @@
+---
+title: Sessions
+description: Learn how sessions group related traces and enable cross-trace analysis
+---
+
+Sessions group multiple traces that belong to the same logical unit of work, such as a user session, a batch job, or a conversation thread.
+
+## What is a session?
+
+A session is a container for one or more traces. All spans within a session share the same `sessionId`, enabling you to:
+
+- Track multi-step workflows across multiple API calls
+- Analyze user behavior across multiple interactions
+- Monitor batch processing jobs
+- Debug conversation flows in chatbots
+
+## Session structure
+
+Each session has:
+
+- **Session ID**: A unique UUID identifying the session
+- **Session name**: An optional human-readable name
+- **Session tags**: Tags applied to all traces in the session
+
+Relevant code: [Span.ts:19-20](/home/daytona/workspace/source/src/observability/Span.ts:19-20)
+
+## Creating sessions
+
+### Automatic session creation
+
+When you create a root span without specifying a session, one is automatically generated:
+
+```typescript
+import { withSpan } from 'zeroeval';
+
+// A new sessionId is automatically generated
+await withSpan({ name: 'handleRequest' }, async () => {
+  // All child spans inherit this sessionId
+});
+```
+
+### Explicit session creation
+
+You can explicitly set the session ID and name:
+
+```typescript
+await withSpan({
+  name: 'userSession',
+  sessionId: 'session-abc-123',
+  sessionName: 'User Shopping Session'
+}, async () => {
+  // All spans in this tree share the same session
+});
+```
+
+### Using existing sessions
+
+Multiple root traces can share the same session by using the same `sessionId`:
+
+```typescript
+const sessionId = 'user-session-123';
+
+// First API call
+await withSpan({
+  name: 'getProducts',
+  sessionId,
+  sessionName: 'Shopping Session'
+}, async () => {
+  // Fetch products
+});
+
+// Second API call - same session
+await withSpan({
+  name: 'addToCart',
+  sessionId,
+  sessionName: 'Shopping Session'
+}, async () => {
+  // Add items to cart
+});
+
+// Third API call - same session
+await withSpan({
+  name: 'checkout',
+  sessionId,
+  sessionName: 'Shopping Session'
+}, async () => {
+  // Process checkout
+});
+```
+
+Relevant code: [Tracer.ts:117-122](/home/daytona/workspace/source/src/observability/Tracer.ts:117-122)
+
+## Session inheritance
+
+Child spans automatically inherit the session from their parent:
+
+```typescript
+await withSpan({
+  name: 'root',
+  sessionId: 'session-123',
+  sessionName: 'My Session'
+}, async () => {
+  // This span: sessionId = 'session-123'
+  
+  await withSpan({ name: 'child1' }, async () => {
+    // This span: sessionId = 'session-123' (inherited)
+    
+    await withSpan({ name: 'grandchild' }, async () => {
+      // This span: sessionId = 'session-123' (inherited)
+    });
+  });
+  
+  await withSpan({ name: 'child2' }, async () => {
+    // This span: sessionId = 'session-123' (inherited)
+  });
+});
+```
+
+Relevant code: [Tracer.ts:111-112](/home/daytona/workspace/source/src/observability/Tracer.ts:111-112)
+
+## Session tags
+
+You can add tags that apply to all spans in a session:
+
+```typescript
+import { tracer } from 'zeroeval';
+
+const sessionId = 'session-123';
+
+// Add tags to all current and future spans in this session
+tracer.addSessionTags(sessionId, {
+  userId: 'user-456',
+  subscription: 'premium',
+  region: 'us-east'
+});
+```
+
+Session tags are applied retroactively to spans already created and to new spans:
+
+```typescript
+await withSpan({
+  name: 'operation1',
+  sessionId: 'session-123'
+}, async () => {
+  // This span will receive session tags
+});
+
+tracer.addSessionTags('session-123', {
+  outcome: 'success',
+  totalItems: '5'
+});
+
+// Tags are applied to the span created above
+```
+
+Relevant code: [Tracer.ts:190-197](/home/daytona/workspace/source/src/observability/Tracer.ts:190-197)
+
+## Session signals
+
+You can send signals that apply to an entire session:
+
+```typescript
+import { sendSessionSignal } from 'zeroeval';
+
+// Must be called from within an active span
+await withSpan({
+  name: 'operation',
+  sessionId: 'session-123'
+}, async () => {
+  // Send a signal to the current session
+  sendSessionSignal('totalItemsProcessed', 42);
+  sendSessionSignal('hasErrors', false);
+  sendSessionSignal('completionRate', 0.95);
+});
+```
+
+Relevant code: [signals.ts:72-95](/home/daytona/workspace/source/src/signals.ts:72-95)
+
+## Common use cases
+
+### User sessions
+
+Track a user's activity across multiple API requests:
+
+```typescript
+import { withSpan } from 'zeroeval';
+
+const userId = 'user-123';
+const sessionId = `user-session-${userId}-${Date.now()}`;
+
+// User logs in
+await withSpan({
+  name: 'login',
+  sessionId,
+  sessionName: 'User Session',
+  tags: { userId }
+}, async () => {
+  await authenticateUser(userId);
+});
+
+// User browses products
+await withSpan({
+  name: 'browseProducts',
+  sessionId,
+  tags: { userId }
+}, async () => {
+  await fetchProducts();
+});
+
+// User makes a purchase
+await withSpan({
+  name: 'purchase',
+  sessionId,
+  tags: { userId }
+}, async () => {
+  await processPurchase();
+});
+```
+
+### Batch processing
+
+Track a batch job that processes multiple items:
+
+```typescript
+import { withSpan, tracer, sendSessionSignal } from 'zeroeval';
+
+const batchId = 'batch-789';
+const items = ['item1', 'item2', 'item3'];
+
+await withSpan({
+  name: 'batchJob',
+  sessionId: batchId,
+  sessionName: 'Data Import Batch',
+  attributes: { totalItems: items.length }
+}, async () => {
+  let successCount = 0;
+  
+  for (const item of items) {
+    await withSpan({ name: 'processItem' }, async () => {
+      try {
+        await processItem(item);
+        successCount++;
+      } catch (error) {
+        // Error is captured in span
+      }
+    });
+  }
+  
+  // Add session-level metrics
+  sendSessionSignal('totalProcessed', items.length);
+  sendSessionSignal('successCount', successCount);
+  sendSessionSignal('failureCount', items.length - successCount);
+});
+```
+
+### Conversation threads
+
+Track a chatbot conversation across multiple turns:
+
+```typescript
+import { withSpan, tracer } from 'zeroeval';
+
+const conversationId = 'conv-456';
+
+// First message
+await withSpan({
+  name: 'chatMessage',
+  sessionId: conversationId,
+  sessionName: 'Customer Support Chat',
+  attributes: { turn: 1, userMessage: 'Hello' }
+}, async () => {
+  const response = await generateResponse('Hello');
+  return response;
+});
+
+// Second message
+await withSpan({
+  name: 'chatMessage',
+  sessionId: conversationId,
+  attributes: { turn: 2, userMessage: 'I need help' }
+}, async () => {
+  const response = await generateResponse('I need help');
+  return response;
+});
+
+// Add conversation-level metadata
+tracer.addSessionTags(conversationId, {
+  resolved: 'true',
+  satisfactionScore: '5'
+});
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use consistent session IDs">
+    Generate session IDs consistently for the same logical unit:
+    
+    ```typescript
+    // Good - consistent session ID generation
+    const sessionId = `user-${userId}-${timestamp}`;
+    
+    // Or use an existing identifier
+    const sessionId = requestId; // From upstream service
+    const sessionId = conversationId; // From database
+    ```
+  </Accordion>
+
+  <Accordion title="Set meaningful session names">
+    Use descriptive names that indicate the purpose:
+    
+    ```typescript
+    // Good
+    sessionName: 'User Shopping Session'
+    sessionName: 'Batch Import Job #123'
+    sessionName: 'Customer Support Chat'
+    
+    // Avoid
+    sessionName: 'Session'
+    sessionName: 'Process'
+    ```
+  </Accordion>
+
+  <Accordion title="Add session tags for filtering">
+    Use session tags to enable cross-session analysis:
+    
+    ```typescript
+    tracer.addSessionTags(sessionId, {
+      userId: 'user-123',
+      accountType: 'premium',
+      region: 'us-west',
+      version: 'v2.1.0'
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Use session signals for metrics">
+    Track aggregate metrics at the session level:
+    
+    ```typescript
+    sendSessionSignal('totalRequests', requestCount);
+    sendSessionSignal('totalErrors', errorCount);
+    sendSessionSignal('averageResponseTime', avgTime);
+    sendSessionSignal('userSatisfied', true);
+    ```
+  </Accordion>
+
+  <Accordion title="Keep sessions focused">
+    Don't make sessions too broad or too narrow:
+    
+    ```typescript
+    // Too broad - entire user lifetime
+    sessionId: `user-${userId}`
+    
+    // Too narrow - single operation
+    sessionId: randomUUID() // Different for each request
+    
+    // Good - logical unit of work
+    sessionId: `checkout-${userId}-${timestamp}`
+    sessionId: `conversation-${threadId}`
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Related concepts
+
+- [Tracing](/concepts/tracing) - Learn about trace lifecycle and context
+- [Spans](/concepts/spans) - Understand span structure and metadata
+- [Signals](/concepts/signals) - Add metrics to sessions

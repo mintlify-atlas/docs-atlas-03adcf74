@@ -1,0 +1,224 @@
+---
+title: Span decorator
+description: Trace functions using the @span decorator or withSpan wrapper
+---
+
+The `@span` decorator provides automatic tracing for your functions, capturing inputs, outputs, errors, and execution time with minimal code changes.
+
+## Using the decorator
+
+Apply the `@span` decorator to methods to automatically create trace spans:
+
+```typescript
+import { span } from 'zeroeval';
+
+class Calculator {
+  @span({ name: 'math.add' })
+  add(a: number, b: number): number {
+    return a + b;
+  }
+
+  @span({ name: 'math.divide', tags: { operation: 'division' } })
+  async divide(a: number, b: number): Promise<number> {
+    if (b === 0) {
+      throw new Error('Division by zero');
+    }
+    return a / b;
+  }
+}
+```
+
+<Note>
+The decorator works with both synchronous and asynchronous methods. It automatically detects async functions and handles promises correctly.
+</Note>
+
+## Function wrapper pattern
+
+If you prefer not to use decorators, use the `withSpan()` function wrapper:
+
+```typescript
+import { withSpan } from 'zeroeval';
+
+async function add(a: number, b: number): Promise<number> {
+  return withSpan({ name: 'math.add' }, () => {
+    return a + b;
+  });
+}
+```
+
+The wrapper approach is useful when:
+- You're working with standalone functions instead of class methods
+- Your project doesn't support TypeScript decorators
+- You want to wrap existing functions without modifying their signatures
+
+## Capturing inputs and outputs
+
+By default, the decorator automatically captures function arguments and return values:
+
+```typescript
+@span({ name: 'api.fetchUser' })
+async fetchUser(userId: string) {
+  const response = await fetch(`/api/users/${userId}`);
+  return response.json();
+}
+```
+
+The span will include:
+- **Input**: `["user-123"]` (function arguments as JSON array)
+- **Output**: `{"id": "user-123", "name": "Alice"}` (return value as JSON)
+
+For custom input/output handling, use the `inputData` and `outputData` options:
+
+```typescript
+@span({ 
+  name: 'api.updateUser',
+  inputData: { operation: 'update' },
+  outputData: 'User updated successfully'
+})
+async updateUser(userId: string, data: UserData) {
+  // Implementation
+}
+```
+
+## Error handling
+
+The decorator automatically captures errors and attaches them to the span:
+
+```typescript
+@span({ name: 'payment.process' })
+async processPayment(amount: number) {
+  if (amount <= 0) {
+    throw new Error('Invalid amount');
+  }
+  // Process payment
+}
+```
+
+When an error occurs, the span records:
+- Error code (error name)
+- Error message
+- Stack trace
+
+The error is then re-thrown, so your application's error handling continues to work normally.
+
+## Span options
+
+Configure span behavior with these options:
+
+```typescript
+interface SpanOptions {
+  name: string;              // Required: span name
+  sessionId?: string;        // Optional: session identifier
+  sessionName?: string;      // Optional: session name
+  tags?: Record<string, string>;       // Optional: string key-value pairs
+  attributes?: Record<string, unknown>; // Optional: additional metadata
+  inputData?: unknown;       // Optional: custom input data
+  outputData?: unknown;      // Optional: custom output data
+}
+```
+
+### Tags and attributes
+
+Use tags for filtering and grouping spans in the dashboard:
+
+```typescript
+@span({ 
+  name: 'api.search',
+  tags: { 
+    environment: 'production',
+    team: 'search'
+  },
+  attributes: {
+    queryType: 'fulltext',
+    indexName: 'products'
+  }
+})
+async search(query: string) {
+  // Implementation
+}
+```
+
+**Tags** are string key-value pairs used for filtering traces. **Attributes** can contain any JSON-serializable data for additional context.
+
+## Session tracking
+
+Group related spans into sessions:
+
+```typescript
+@span({ 
+  name: 'workflow.process',
+  sessionId: 'session-abc-123',
+  sessionName: 'Product Import Workflow'
+})
+async processWorkflow() {
+  // All nested spans will inherit this session ID
+  await this.validateData();
+  await this.importProducts();
+  await this.updateIndex();
+}
+```
+
+Child spans automatically inherit the session ID from their parent span.
+
+## Working with class instances
+
+The decorator preserves the `this` context:
+
+```typescript
+class ProductService {
+  private apiKey: string;
+
+  constructor(apiKey: string) {
+    this.apiKey = apiKey;
+  }
+
+  @span({ name: 'products.list' })
+  async listProducts(): Promise<Product[]> {
+    // `this` works correctly
+    return this.fetchWithAuth('/products');
+  }
+
+  private async fetchWithAuth(path: string) {
+    return fetch(path, {
+      headers: { Authorization: `Bearer ${this.apiKey}` }
+    });
+  }
+}
+```
+
+## TypeScript configuration
+
+To use decorators, enable them in your `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "experimentalDecorators": true
+  }
+}
+```
+
+## Best practices
+
+<Steps>
+  <Step title="Name spans descriptively">
+    Use hierarchical names like `service.operation` or `module.function` for better organization in traces.
+  </Step>
+  
+  <Step title="Avoid capturing sensitive data">
+    Be mindful of what data is captured in inputs and outputs. Use custom `inputData`/`outputData` to exclude sensitive information.
+  </Step>
+  
+  <Step title="Tag strategically">
+    Add tags that help you filter and analyze traces, such as environment, user type, or feature flags.
+  </Step>
+  
+  <Step title="Trace at meaningful boundaries">
+    Focus on tracing at service boundaries, external API calls, and key business logic rather than low-level utilities.
+  </Step>
+</Steps>
+
+## Related resources
+
+- [Manual tracing](/guides/manual-tracing) - Lower-level span control
+- [Streaming](/guides/streaming) - Automatic streaming support

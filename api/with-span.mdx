@@ -1,0 +1,296 @@
+---
+title: "withSpan()"
+description: "Execute code within a traced span context for both synchronous and asynchronous operations"
+---
+
+The `withSpan()` function wraps a code block in a span context, enabling manual tracing without decorators. It supports both synchronous and asynchronous execution.
+
+## Usage
+
+Wrap any function execution to create a traced span:
+
+```typescript
+import { withSpan } from 'zeroeval';
+
+const result = await withSpan(
+  { name: 'process-batch' },
+  async () => {
+    const data = await fetchData();
+    return processData(data);
+  }
+);
+```
+
+## Type Signature
+
+```typescript
+function withSpan<T>(
+  opts: SpanOptions,
+  fn: () => Promise<T> | T
+): Promise<T> | T
+```
+
+## Parameters
+
+<ParamField path="opts" type="SpanOptions" required>
+  Configuration options for the span
+</ParamField>
+
+<ParamField path="fn" type="() => Promise<T> | T" required>
+  The function to execute within the span context. Can be synchronous or asynchronous.
+</ParamField>
+
+### SpanOptions
+
+<ParamField path="name" type="string" required>
+  The name of the span. Used to identify this operation in your traces.
+</ParamField>
+
+<ParamField path="sessionId" type="string">
+  Optional session identifier to group related spans together.
+</ParamField>
+
+<ParamField path="sessionName" type="string">
+  Optional human-readable name for the session.
+</ParamField>
+
+<ParamField path="tags" type="Record<string, string>">
+  String key-value pairs for categorizing and filtering spans.
+  
+  ```typescript
+  tags: { environment: 'staging', operation: 'batch-process' }
+  ```
+</ParamField>
+
+<ParamField path="attributes" type="Record<string, unknown>">
+  Additional metadata to attach to the span. Accepts any JSON-serializable values.
+  
+  ```typescript
+  attributes: { batchSize: 100, retryAttempt: 1 }
+  ```
+</ParamField>
+
+<ParamField path="inputData" type="unknown">
+  Explicit input data to log with the span. Only logged if provided.
+</ParamField>
+
+<ParamField path="outputData" type="unknown">
+  Explicit output data to log with the span. If not provided, the function's return value is logged.
+</ParamField>
+
+## Return Value
+
+Returns the same type as the provided function:
+- If `fn` returns `Promise<T>`, `withSpan()` returns `Promise<T>`
+- If `fn` returns `T`, `withSpan()` returns `T`
+
+## Async Example
+
+Trace asynchronous operations:
+
+```typescript
+import { withSpan } from 'zeroeval';
+
+async function processUserData(userId: string) {
+  return await withSpan(
+    {
+      name: 'fetch-user-data',
+      tags: { userId },
+      attributes: { source: 'database' }
+    },
+    async () => {
+      const user = await db.users.findById(userId);
+      const orders = await db.orders.findByUser(userId);
+      return { user, orders };
+    }
+  );
+}
+```
+
+## Sync Example
+
+Trace synchronous operations:
+
+```typescript
+import { withSpan } from 'zeroeval';
+
+function calculateMetrics(data: number[]) {
+  return withSpan(
+    {
+      name: 'calculate-metrics',
+      inputData: { count: data.length },
+      attributes: { algorithm: 'mean' }
+    },
+    () => {
+      const sum = data.reduce((a, b) => a + b, 0);
+      return sum / data.length;
+    }
+  );
+}
+```
+
+## Error Handling
+
+Errors thrown inside the function are automatically captured:
+
+```typescript
+import { withSpan } from 'zeroeval';
+
+try {
+  await withSpan(
+    { name: 'risky-operation' },
+    async () => {
+      throw new Error('Something went wrong');
+    }
+  );
+} catch (error) {
+  // Error is captured in the span and re-thrown
+  console.error('Operation failed:', error);
+}
+```
+
+The span captures:
+- `code` - Error name (e.g., 'Error', 'TypeError')
+- `message` - Error message
+- `stack` - Stack trace
+
+The error is then re-thrown for your application to handle.
+
+## Nested Spans
+
+You can nest `withSpan()` calls to create parent-child span relationships:
+
+```typescript
+import { withSpan } from 'zeroeval';
+
+async function processDocument(docId: string) {
+  return await withSpan(
+    { name: 'process-document', tags: { docId } },
+    async () => {
+      const content = await withSpan(
+        { name: 'fetch-content' },
+        async () => db.documents.getContent(docId)
+      );
+
+      const analyzed = await withSpan(
+        { name: 'analyze-content' },
+        async () => analyzeText(content)
+      );
+
+      return analyzed;
+    }
+  );
+}
+```
+
+The SDK's `AsyncLocalStorage`-based context automatically links child spans to their parent.
+
+## Input/Output Logging
+
+Control what gets logged:
+
+```typescript
+import { withSpan } from 'zeroeval';
+
+// Automatic output capture
+const result = await withSpan(
+  { name: 'compute', inputData: { type: 'batch' } },
+  async () => {
+    return { success: true, count: 42 }; // Automatically logged
+  }
+);
+
+// Explicit output override
+const result2 = await withSpan(
+  {
+    name: 'sensitive-compute',
+    inputData: 'REDACTED',
+    outputData: 'REDACTED'
+  },
+  async () => {
+    return sensitiveOperation(); // Return value not logged
+  }
+);
+```
+
+<Note>
+  If neither `inputData` nor `outputData` is provided, only the output (return value) is captured. Use `inputData` to explicitly log input context.
+</Note>
+
+## Advanced Example
+
+Combine sessions, tags, and attributes for comprehensive tracing:
+
+```typescript
+import { withSpan } from 'zeroeval';
+
+class DataPipeline {
+  async runPipeline(jobId: string, data: any[]) {
+    return await withSpan(
+      {
+        name: 'pipeline-execution',
+        sessionId: jobId,
+        sessionName: 'Data Pipeline Run',
+        tags: {
+          jobType: 'batch',
+          priority: 'high'
+        },
+        attributes: {
+          recordCount: data.length,
+          startTime: new Date().toISOString()
+        },
+        inputData: { jobId, recordCount: data.length }
+      },
+      async () => {
+        const validated = await this.validate(data);
+        const transformed = await this.transform(validated);
+        const loaded = await this.load(transformed);
+        return { loaded: loaded.length, jobId };
+      }
+    );
+  }
+
+  private async validate(data: any[]) {
+    return await withSpan(
+      { name: 'validate-data' },
+      async () => {
+        return data.filter(d => d.id && d.value);
+      }
+    );
+  }
+
+  private async transform(data: any[]) {
+    return await withSpan(
+      { name: 'transform-data' },
+      async () => {
+        return data.map(d => ({ ...d, processed: true }));
+      }
+    );
+  }
+
+  private async load(data: any[]) {
+    return await withSpan(
+      { name: 'load-data' },
+      async () => {
+        await db.bulk.insert(data);
+        return data;
+      }
+    );
+  }
+}
+```
+
+## When to Use
+
+Use `withSpan()` when:
+- You can't use decorators (e.g., functional code, arrow functions)
+- You want to trace a specific code block within a larger function
+- You need fine-grained control over span boundaries
+- You're working with frameworks that don't support decorators
+
+For class methods, consider using the [`@span()` decorator](/api/span-decorator) instead.
+
+## Related
+
+- [span() Decorator](/api/span-decorator) - Decorator-based tracing for class methods
+- [Tracer](/api/tracer) - Low-level span management

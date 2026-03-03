@@ -1,0 +1,148 @@
+---
+title: getEntitySignals()
+description: Retrieve all signals for a specific entity
+---
+
+Retrieve all signals associated with a specific entity by its type and ID.
+
+## Signature
+
+```typescript
+async function getEntitySignals(
+  entityType: 'session' | 'trace' | 'span' | 'completion',
+  entityId: string
+): Promise<Signal[]>
+```
+
+## Parameters
+
+<ParamField path="entityType" type="'session' | 'trace' | 'span' | 'completion'" required>
+  Type of entity to retrieve signals for.
+</ParamField>
+
+<ParamField path="entityId" type="string" required>
+  UUID of the entity to retrieve signals for.
+</ParamField>
+
+## Returns
+
+A `Promise<Signal[]>` that resolves to an array of signals. Returns an empty array if no signals are found or if the entity does not exist.
+
+## Type Definitions
+
+```typescript
+interface Signal {
+  value: string | boolean | number;
+  type: 'boolean' | 'numerical';
+}
+```
+
+## Examples
+
+### Retrieve signals for a trace
+
+```typescript
+import { getEntitySignals } from 'zeroeval';
+
+const signals = await getEntitySignals('trace', traceId);
+console.log('Trace signals:', signals);
+```
+
+### Retrieve and analyze session signals
+
+```typescript
+import { getEntitySignals } from 'zeroeval';
+
+const signals = await getEntitySignals('session', sessionId);
+
+if (signals.length > 0) {
+  console.log(`Found ${signals.length} signals for session`);
+  
+  // Filter numerical signals
+  const numericalSignals = signals.filter(s => s.type === 'numerical');
+  console.log('Numerical signals:', numericalSignals);
+  
+  // Filter boolean signals
+  const booleanSignals = signals.filter(s => s.type === 'boolean');
+  console.log('Boolean signals:', booleanSignals);
+} else {
+  console.log('No signals found for session');
+}
+```
+
+### Retrieve signals for a span
+
+```typescript
+import { getEntitySignals, tracer } from 'zeroeval';
+
+const span = tracer.startSpan('example');
+
+try {
+  // Add some signals
+  span.addSignal('metric1', 100);
+  span.addSignal('metric2', true);
+  
+  tracer.endSpan(span);
+  
+  // Flush to ensure signals are sent
+  await tracer.flush();
+  
+  // Retrieve the signals
+  const signals = await getEntitySignals('span', span.id);
+  console.log('Span signals:', signals);
+} catch (error) {
+  tracer.endSpan(span);
+  throw error;
+}
+```
+
+### Check for specific signal values
+
+```typescript
+import { getEntitySignals } from 'zeroeval';
+
+const signals = await getEntitySignals('completion', completionId);
+
+// Convert array to object for easier lookup
+const signalMap = signals.reduce((acc, signal, index) => {
+  acc[`signal_${index}`] = signal;
+  return acc;
+}, {} as Record<string, Signal>);
+
+console.log('Signal map:', signalMap);
+```
+
+## Error Handling
+
+```typescript
+import { getEntitySignals } from 'zeroeval';
+
+try {
+  const signals = await getEntitySignals('trace', traceId);
+  
+  if (signals.length === 0) {
+    console.log('No signals found');
+  } else {
+    // Process signals
+    for (const signal of signals) {
+      console.log(`Signal: ${signal.value} (${signal.type})`);
+    }
+  }
+} catch (error) {
+  console.error('Failed to retrieve signals:', error);
+}
+```
+
+## Notes
+
+- Returns an empty array if the entity does not exist or has no signals
+- Returns an empty array if the response is null or invalid
+- The function handles malformed responses gracefully
+
+## Related
+
+- [sendSignal()](/api/send-signal) - Send a signal to a specific entity
+- [sendBulkSignals()](/api/send-bulk-signals) - Send multiple signals in a batch
+- [sendTraceSignal()](/api/send-trace-signal) - Send a signal to the current trace
+- [sendSessionSignal()](/api/send-session-signal) - Send a signal to the current session
+- [sendSpanSignal()](/api/send-span-signal) - Send a signal to the current span

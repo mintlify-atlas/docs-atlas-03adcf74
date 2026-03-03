@@ -1,0 +1,265 @@
+---
+title: wrapOpenAI
+description: Wrap OpenAI client instances with automatic tracing
+---
+
+<RequestExample>
+```typescript Basic Usage
+import { OpenAI } from 'openai';
+import { wrapOpenAI } from '@zeroeval/sdk';
+
+const client = wrapOpenAI(new OpenAI());
+
+const completion = await client.chat.completions.create({
+  model: 'gpt-4',
+  messages: [{ role: 'user', content: 'Hello!' }]
+});
+```
+
+```typescript Streaming
+import { OpenAI } from 'openai';
+import { wrapOpenAI } from '@zeroeval/sdk';
+
+const client = wrapOpenAI(new OpenAI());
+
+const stream = await client.chat.completions.create({
+  model: 'gpt-4',
+  messages: [{ role: 'user', content: 'Hello!' }],
+  stream: true
+});
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk.choices[0]?.delta?.content || '');
+}
+```
+
+```typescript Embeddings
+import { OpenAI } from 'openai';
+import { wrapOpenAI } from '@zeroeval/sdk';
+
+const client = wrapOpenAI(new OpenAI());
+
+const embeddings = await client.embeddings.create({
+  model: 'text-embedding-3-small',
+  input: 'The quick brown fox'
+});
+```
+</RequestExample>
+
+## Overview
+
+`wrapOpenAI()` creates a proxy-based wrapper around your OpenAI client that automatically traces all API calls. The wrapper preserves all TypeScript types and client functionality while instrumenting methods for observability.
+
+If `ze.init()` hasn't been called and `ZEROEVAL_API_KEY` is set in your environment, the SDK will automatically initialize itself.
+
+## Type Signature
+
+```typescript
+function wrapOpenAI<T extends InstanceType<typeof OpenAI>>(
+  client: T
+): WrappedOpenAI<T>
+```
+
+## Parameters
+
+<ParamField path="client" type="InstanceType<typeof OpenAI>" required>
+  An instance of the OpenAI client from the `openai` package.
+</ParamField>
+
+## Returns
+
+<ResponseField name="WrappedOpenAI<T>" type="T & { __zeroeval_wrapped?: boolean }">
+  A wrapped OpenAI client that preserves all original types and functionality while adding automatic tracing.
+</ResponseField>
+
+## Traced Operations
+
+### Chat Completions
+
+**Method**: `client.chat.completions.create()`
+
+Traces both streaming and non-streaming chat completions with:
+- Full input/output capture
+- Token usage metrics (`inputTokens`, `outputTokens`)
+- Throughput calculation (chars/second)
+- Streaming metrics (latency to first token)
+- Prompt metadata extraction and variable interpolation
+
+### Embeddings
+
+**Method**: `client.embeddings.create()`
+
+Traces embedding generation with:
+- Input text capture
+- Model information
+- Embedding dimension and count
+
+### Images
+
+**Methods**: 
+- `client.images.generate()`
+- `client.images.edit()`
+- `client.images.createVariation()`
+
+Traces image generation operations with request parameters.
+
+### Audio
+
+**Methods**:
+- `client.audio.transcriptions.create()`
+- `client.audio.translations.create()`
+
+Traces audio processing operations.
+
+## Proxy-Based Instrumentation
+
+The wrapper uses JavaScript Proxies to intercept method calls without modifying the original client:
+
+```typescript
+// The wrapper intercepts calls at multiple levels:
+openai.chat.completions.create(...)
+  └─> Proxy on openai
+      └─> Proxy on chat
+          └─> Proxy on completions
+              └─> Wrapped create() method
+```
+
+This approach ensures:
+- No monkey-patching or prototype modification
+- Full type preservation
+- No interference with OpenAI SDK internals
+
+## Streaming Support
+
+`wrapOpenAI()` fully supports streaming responses. The wrapper:
+
+1. Detects when `stream: true` is set
+2. Wraps the async iterator returned by OpenAI
+3. Captures chunks as they arrive
+4. Records latency to first token
+5. Calculates throughput after completion
+6. Extracts usage information from final chunk (when available)
+
+```typescript
+const stream = await client.chat.completions.create({
+  model: 'gpt-4',
+  messages: [{ role: 'user', content: 'Write a story' }],
+  stream: true
+});
+
+// Each chunk is traced
+for await (const chunk of stream) {
+  // Use chunks normally
+}
+// Span ends when stream completes
+```
+
+## Metadata Extraction
+
+The wrapper automatically processes ZeroEval metadata embedded in system messages:
+
+```typescript
+const completion = await client.chat.completions.create({
+  model: 'gpt-4',
+  messages: [
+    {
+      role: 'system',
+      content: `
+<!--zeroeval
+task: customer-support
+prompt_version_id: pv_abc123
+variables:
+  user_name: Alice
+  issue_type: billing
+-->
+You are a helpful assistant for {{user_name}}.
+Handle their {{issue_type}} issue.
+      `
+    },
+    { role: 'user', content: 'I need help' }
+  ]
+});
+```
+
+The wrapper:
+1. Extracts metadata from the HTML comment
+2. Interpolates variables in the prompt template
+3. Removes the metadata comment before sending to OpenAI
+4. Attaches metadata to the trace span
+
+## Double-Wrap Protection
+
+Calling `wrapOpenAI()` on an already-wrapped client returns the existing wrapper:
+
+```typescript
+const wrapped1 = wrapOpenAI(new OpenAI());
+const wrapped2 = wrapOpenAI(wrapped1); // Returns wrapped1
+```
+
+## Error Tracing
+
+API errors are automatically captured and attached to spans:
+
+```typescript
+try {
+  await client.chat.completions.create({
+    model: 'invalid-model',
+    messages: [{ role: 'user', content: 'Hello' }]
+  });
+} catch (error) {
+  // Error is traced with code, message, and stack
+}
+```
+
+## Span Attributes
+
+Each traced operation includes:
+
+<ResponseField name="service.name" type="string">
+  Set to `"openai"`
+</ResponseField>
+
+<ResponseField name="kind" type="string">
+  Operation kind: `"llm"`, `"embedding"`, or `"operation"`
+</ResponseField>
+
+<ResponseField name="provider" type="string">
+  Set to `"openai"`
+</ResponseField>
+
+<ResponseField name="model" type="string">
+  The model name used in the request
+</ResponseField>
+
+<ResponseField name="messages" type="array">
+  Serialized messages (for chat completions)
+</ResponseField>
+
+<ResponseField name="streaming" type="boolean">
+  Whether the request used streaming
+</ResponseField>
+
+<ResponseField name="inputTokens" type="number">
+  Prompt tokens consumed (from usage data)
+</ResponseField>
+
+<ResponseField name="outputTokens" type="number">
+  Completion tokens generated (from usage data)
+</ResponseField>
+
+<ResponseField name="throughput" type="number">
+  Characters per second for the completion
+</ResponseField>
+
+<ResponseField name="latency" type="number">
+  Time to first token (streaming only)
+</ResponseField>
+
+<ResponseField name="zeroeval" type="object">
+  Extracted ZeroEval metadata (task, prompt_version_id, variables)
+</ResponseField>
+
+## Related Functions
+
+- [`wrap()`](/api/wrap) - Auto-detect and wrap any supported client
+- [`wrapVercelAI()`](/api/wrap-vercel-ai) - Vercel AI SDK wrapper

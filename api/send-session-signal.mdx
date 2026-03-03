@@ -1,0 +1,140 @@
+---
+title: sendSessionSignal()
+description: Send a signal to the current session
+---
+
+Send a signal to the current active session. This is a convenience function that automatically determines the session ID from the current execution context.
+
+## Signature
+
+```typescript
+function sendSessionSignal(
+  name: string,
+  value: string | boolean | number,
+  signalType?: 'boolean' | 'numerical'
+): void
+```
+
+## Parameters
+
+<ParamField path="name" type="string" required>
+  Name of the signal.
+</ParamField>
+
+<ParamField path="value" type="string | boolean | number" required>
+  Value of the signal. Can be a string, boolean, or number.
+</ParamField>
+
+<ParamField path="signalType" type="'boolean' | 'numerical'" optional>
+  Optional signal type. If not provided, the type will be auto-detected based on the value.
+</ParamField>
+
+## Returns
+
+`void` - The signal is queued and will be sent when the session is flushed.
+
+## Behavior
+
+- If no active session is found, a warning is logged and the signal is not sent
+- The signal is added to pending session signals and will be sent when the session completes
+- This function is synchronous and does not block execution
+
+## Examples
+
+### Send a signal to the current session
+
+```typescript
+import { sendSessionSignal, span } from 'zeroeval';
+
+@span()
+async function processUser(userId: string) {
+  // Send a signal to the session
+  sendSessionSignal('total_users_processed', 1);
+  
+  // Process user...
+  return { userId };
+}
+```
+
+### Track session-level metrics
+
+```typescript
+import { sendSessionSignal, tracer } from 'zeroeval';
+
+async function main() {
+  const rootSpan = tracer.startSpan('main', {
+    sessionName: 'user-processing-session'
+  });
+  
+  try {
+    const users = ['user1', 'user2', 'user3'];
+    
+    for (const userId of users) {
+      await processUser(userId);
+    }
+    
+    // Send session-level signals
+    sendSessionSignal('total_processed', users.length);
+    sendSessionSignal('success', true);
+  } finally {
+    tracer.endSpan(rootSpan);
+  }
+}
+```
+
+### Accumulate session metrics
+
+```typescript
+import { sendSessionSignal, tracer } from 'zeroeval';
+
+let totalCost = 0;
+
+async function processWithCost(item: any) {
+  const span = tracer.startSpan('process');
+  
+  try {
+    const cost = calculateCost(item);
+    totalCost += cost;
+    
+    // Update session-level total cost
+    sendSessionSignal('total_cost', totalCost);
+    sendSessionSignal('items_processed', 1);
+  } finally {
+    tracer.endSpan(span);
+  }
+}
+```
+
+### Track session completion status
+
+```typescript
+import { sendSessionSignal, tracer } from 'zeroeval';
+
+async function runWorkflow() {
+  const span = tracer.startSpan('workflow', {
+    sessionName: 'data-pipeline'
+  });
+  
+  try {
+    await step1();
+    await step2();
+    await step3();
+    
+    sendSessionSignal('workflow_status', 'completed');
+    sendSessionSignal('all_steps_passed', true);
+  } catch (error) {
+    sendSessionSignal('workflow_status', 'failed');
+    sendSessionSignal('all_steps_passed', false);
+    throw error;
+  } finally {
+    tracer.endSpan(span);
+  }
+}
+```
+
+## Related
+
+- [sendSignal()](/api/send-signal) - Send a signal to a specific entity
+- [sendTraceSignal()](/api/send-trace-signal) - Send a signal to the current trace
+- [sendSpanSignal()](/api/send-span-signal) - Send a signal to the current span
+- [sendBulkSignals()](/api/send-bulk-signals) - Send multiple signals in a batch

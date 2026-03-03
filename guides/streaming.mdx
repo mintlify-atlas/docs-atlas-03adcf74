@@ -1,0 +1,335 @@
+---
+title: Streaming
+description: Automatic tracing for streaming LLM requests with latency and throughput metrics
+---
+
+The ZeroEval SDK automatically traces streaming LLM requests from OpenAI and Vercel AI SDK, capturing latency, throughput, and token metrics without code changes.
+
+## OpenAI streaming
+
+Enable streaming in OpenAI requests:
+
+```typescript
+import { OpenAI } from 'openai';
+import { wrap } from 'zeroeval';
+
+const openai = wrap(new OpenAI());
+
+const stream = await openai.chat.completions.create({
+  model: 'gpt-4',
+  messages: [
+    { role: 'system', content: 'You are a helpful assistant.' },
+    { role: 'user', content: 'Tell me a short story.' }
+  ],
+  stream: true
+});
+
+// Consume the stream
+for await (const chunk of stream) {
+  const content = chunk.choices[0]?.delta?.content || '';
+  if (content) {
+    process.stdout.write(content);
+  }
+}
+```
+
+The wrapper automatically tracks:
+- Time to first token (latency)
+- Characters per second (throughput)
+- Total input and output tokens
+- Full response assembly
+
+## Vercel AI SDK streaming
+
+Stream with the Vercel AI SDK:
+
+```typescript
+import * as ai from 'ai';
+import { createOpenAI } from '@ai-sdk/openai';
+import { wrap } from 'zeroeval';
+
+const openai = createOpenAI();
+const wrappedAI = wrap(ai);
+
+const result = await wrappedAI.streamText({
+  model: openai('gpt-4o-mini'),
+  system: 'You are a concise assistant.',
+  messages: [
+    { role: 'user', content: 'Explain TypeScript in one sentence.' }
+  ]
+});
+
+// Consume text stream
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+The wrapper supports both `textStream` and `fullStream` iterators.
+
+## Token tracking
+
+For OpenAI streaming requests, enable usage tracking:
+
+```typescript
+const stream = await openai.chat.completions.create({
+  model: 'gpt-4',
+  messages: [ /* ... */ ],
+  stream: true,
+  stream_options: { include_usage: true }
+});
+```
+
+The SDK automatically sets `stream_options.include_usage` for OpenAI-native models, capturing token counts in the final chunk.
+
+<Note>
+Token usage in streaming mode is only available for OpenAI models (gpt-4, gpt-3.5-turbo, etc.). Third-party models accessed via OpenAI may not support this feature.
+</Note>
+
+## Latency metrics
+
+The SDK captures time to first token (TTFT):
+
+```typescript
+const stream = await openai.chat.completions.create({
+  model: 'gpt-4',
+  messages: [ /* ... */ ],
+  stream: true
+});
+
+// Latency is automatically tracked
+for await (const chunk of stream) {
+  // First content chunk triggers latency calculation
+}
+
+// Check the span for latency
+const span = getCurrentSpan();
+console.log('Latency:', span?.attributes.latency, 'seconds');
+```
+
+Latency is calculated from request start to the first content chunk and stored in `span.attributes.latency` (in seconds).
+
+## Throughput calculation
+
+Throughput is calculated as characters per second:
+
+```typescript
+const stream = await openai.chat.completions.create({
+  model: 'gpt-4',
+  messages: [ /* ... */ ],
+  stream: true
+});
+
+let fullResponse = '';
+for await (const chunk of stream) {
+  const content = chunk.choices[0]?.delta?.content || '';
+  fullResponse += content;
+}
+
+// Throughput is automatically calculated
+const span = getCurrentSpan();
+console.log('Throughput:', span?.attributes.throughput, 'chars/sec');
+```
+
+The formula: `throughput = total_characters / elapsed_time`
+
+## Full stream vs text stream
+
+Vercel AI SDK offers two stream types:
+
+```typescript
+const result = await wrappedAI.streamText({ /* ... */ });
+
+// Text stream - raw string chunks
+for await (const textChunk of result.textStream) {
+  console.log('Text:', textChunk);
+}
+
+// Full stream - structured chunks with metadata
+for await (const chunk of result.fullStream) {
+  if (chunk.type === 'text-delta') {
+    console.log('Delta:', chunk.textDelta);
+  }
+  if (chunk.usage) {
+    console.log('Tokens:', chunk.usage);
+  }
+}
+```
+
+Both are automatically traced. Use `fullStream` when you need metadata like token counts and chunk types.
+
+## Stream error handling
+
+Errors during streaming are captured automatically:
+
+```typescript
+try {
+  const stream = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [ /* ... */ ],
+    stream: true
+  });
+  
+  for await (const chunk of stream) {
+    // Process chunk
+  }
+} catch (error) {
+  // Error is automatically attached to the span
+  console.error('Stream error:', error);
+}
+```
+
+The span will include:
+- Error code (error name)
+- Error message
+- Stack trace
+
+## Streaming with prompts
+
+Combine streaming with prompt management:
+
+```typescript
+import { wrap, prompt } from 'zeroeval';
+
+const openai = wrap(new OpenAI());
+
+const systemPrompt = await prompt({
+  name: 'storyteller',
+  content: 'You are a creative storyteller.'
+});
+
+const stream = await openai.chat.completions.create({
+  model: 'gpt-4',
+  messages: [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: 'Tell me about a brave cat.' }
+  ],
+  stream: true
+});
+
+for await (const chunk of stream) {
+  const content = chunk.choices[0]?.delta?.content || '';
+  process.stdout.write(content);
+}
+```
+
+Prompt metadata is extracted before streaming begins and attached to the span.
+
+## Streaming metrics
+
+Metrics automatically captured for streaming requests:
+
+| Metric | Attribute | Description |
+|--------|-----------|-------------|
+| Time to first token | `latency` | Seconds from request start to first content chunk |
+| Throughput | `throughput` | Characters per second (total chars / elapsed time) |
+| Input tokens | `inputTokens` | Prompt tokens (if available) |
+| Output tokens | `outputTokens` | Completion tokens (if available) |
+| Chunk count | `chunkCount` | Total number of chunks received (Vercel AI only) |
+| Streaming | `streaming` | Boolean flag indicating streaming mode |
+
+## Next.js streaming example
+
+Stream responses in Next.js API routes:
+
+```typescript
+import { OpenAI } from 'openai';
+import { wrap } from 'zeroeval';
+import { NextRequest } from 'next/server';
+
+const openai = wrap(new OpenAI());
+
+export async function POST(request: NextRequest) {
+  const { message } = await request.json();
+  
+  const stream = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [
+      { role: 'system', content: 'You are a helpful assistant.' },
+      { role: 'user', content: message }
+    ],
+    stream: true
+  });
+  
+  // Create a ReadableStream for the response
+  const encoder = new TextEncoder();
+  const readable = new ReadableStream({
+    async start(controller) {
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content || '';
+        if (content) {
+          controller.enqueue(encoder.encode(content));
+        }
+      }
+      controller.close();
+    }
+  });
+  
+  return new Response(readable, {
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+  });
+}
+```
+
+## Vercel AI SDK data stream
+
+Use Vercel AI's data stream utilities:
+
+```typescript
+import * as ai from 'ai';
+import { createOpenAI } from '@ai-sdk/openai';
+import { wrap } from 'zeroeval';
+
+const openai = createOpenAI();
+const wrappedAI = wrap(ai);
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  
+  const result = await wrappedAI.streamText({
+    model: openai('gpt-4o-mini'),
+    messages
+  });
+  
+  // Convert to data stream response
+  return result.toDataStreamResponse();
+}
+```
+
+The span is automatically closed when `toDataStreamResponse()` is called.
+
+## Best practices
+
+<Steps>
+  <Step title="Always consume streams completely">
+    Ensure you iterate through all chunks to get accurate metrics. Partial consumption will result in incomplete data.
+  </Step>
+  
+  <Step title="Enable usage tracking for OpenAI">
+    Set `stream_options.include_usage = true` to capture token counts. The SDK does this automatically for native OpenAI models.
+  </Step>
+  
+  <Step title="Handle errors gracefully">
+    Wrap stream consumption in try-catch blocks. Errors are automatically attached to spans but should still be handled in your application.
+  </Step>
+  
+  <Step title="Use fullStream for detailed metrics">
+    When using Vercel AI SDK, prefer `fullStream` over `textStream` if you need chunk-level metadata and usage statistics.
+  </Step>
+</Steps>
+
+## Performance considerations
+
+The SDK's streaming wrapper adds minimal overhead:
+- **Latency**: < 1ms per chunk (imperceptible to users)
+- **Memory**: Buffers only the current chunk, not the entire response
+- **Throughput**: No throttling or rate limiting
+
+<Tip>
+Streaming traces are ended when the stream is fully consumed or when conversion methods like `toDataStreamResponse()` are called.
+</Tip>
+
+## Related resources
+
+- [Span decorator](/guides/span-decorator) - Trace functions automatically
+- [Prompt management](/guides/prompt-management) - Version and optimize prompts

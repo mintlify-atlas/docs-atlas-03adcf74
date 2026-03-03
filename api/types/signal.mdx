@@ -1,0 +1,291 @@
+---
+title: Signal
+description: Signal types for attaching boolean, numerical, and string metrics to traces, spans, and sessions
+---
+
+## Overview
+
+Signals let you attach metrics and metadata to your traces, spans, sessions, and completions. You can use signals to track success rates, latency, custom scores, or any other numeric or boolean metrics.
+
+## Type Definitions
+
+### Signal
+
+```typescript
+interface Signal {
+  value: string | boolean | number;
+  type: SignalType;
+}
+
+type SignalType = 'boolean' | 'numerical';
+```
+
+### SignalCreate
+
+```typescript
+interface SignalCreate {
+  entity_type: 'session' | 'trace' | 'span' | 'completion';
+  entity_id: string;
+  name: string;
+  value: string | boolean | number;
+  signal_type?: SignalType;
+}
+```
+
+### BulkSignalsCreate
+
+```typescript
+interface BulkSignalsCreate {
+  signals: SignalCreate[];
+}
+```
+
+### SignalResponse
+
+```typescript
+interface SignalResponse {
+  status: string;
+  message: string;
+  processed_count?: number;
+  failed_count?: number;
+  errors?: Array<{
+    index: number;
+    entity_type: string;
+    entity_id: string;
+    signal_name: string;
+    error: string;
+  }>;
+}
+```
+
+## Signal Properties
+
+<ResponseField name="value" type="string | boolean | number" required>
+  The signal value. Can be a boolean (true/false), number (for metrics like latency or scores), or string.
+</ResponseField>
+
+<ResponseField name="type" type="SignalType" required>
+  The signal type: either `'boolean'` for true/false values or `'numerical'` for numeric metrics.
+</ResponseField>
+
+## SignalCreate Properties
+
+<ResponseField name="entity_type" type="'session' | 'trace' | 'span' | 'completion'" required>
+  The type of entity to attach the signal to:
+  - `'session'`: Attach to a session (multi-turn conversation)
+  - `'trace'`: Attach to a complete trace
+  - `'span'`: Attach to a specific span
+  - `'completion'`: Attach to an LLM completion
+</ResponseField>
+
+<ResponseField name="entity_id" type="string" required>
+  The unique identifier of the entity (session ID, trace ID, span ID, or completion ID).
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  The name of the signal. Use descriptive names like `'success'`, `'latency_ms'`, or `'user_satisfaction'`.
+</ResponseField>
+
+<ResponseField name="value" type="string | boolean | number" required>
+  The signal value.
+</ResponseField>
+
+<ResponseField name="signal_type" type="SignalType">
+  Optional signal type. If not provided, the SDK automatically detects the type based on the value.
+</ResponseField>
+
+## Signal Types
+
+### Boolean Signals
+
+Use boolean signals to track binary outcomes:
+
+- Success/failure indicators
+- Feature flags
+- Quality gates
+- User satisfaction (thumbs up/down)
+
+```typescript
+const signal: Signal = {
+  value: true,
+  type: 'boolean'
+};
+```
+
+### Numerical Signals
+
+Use numerical signals to track metrics:
+
+- Latency measurements
+- Custom scores
+- Token counts
+- Cost calculations
+- Performance metrics
+
+```typescript
+const signal: Signal = {
+  value: 245.7,
+  type: 'numerical'
+};
+```
+
+## Entity Types
+
+### Session Signals
+
+Attach signals to entire user sessions:
+
+```typescript
+await ze.signals.create({
+  entity_type: 'session',
+  entity_id: 'session-123',
+  name: 'conversation_successful',
+  value: true
+});
+```
+
+### Trace Signals
+
+Attach signals to complete traces:
+
+```typescript
+await ze.signals.create({
+  entity_type: 'trace',
+  entity_id: 'trace-456',
+  name: 'total_latency_ms',
+  value: 1250
+});
+```
+
+### Span Signals
+
+Attach signals to individual spans:
+
+```typescript
+await ze.signals.create({
+  entity_type: 'span',
+  entity_id: 'span-789',
+  name: 'cache_hit',
+  value: false
+});
+```
+
+### Completion Signals
+
+Attach signals to LLM completions:
+
+```typescript
+await ze.signals.create({
+  entity_type: 'completion',
+  entity_id: 'completion-abc',
+  name: 'quality_score',
+  value: 0.92
+});
+```
+
+## Usage Examples
+
+### Creating a Single Signal
+
+```typescript
+import { ze } from 'zeroeval';
+
+// Boolean signal
+await ze.signals.create({
+  entity_type: 'span',
+  entity_id: spanId,
+  name: 'success',
+  value: true,
+  signal_type: 'boolean'
+});
+
+// Numerical signal
+await ze.signals.create({
+  entity_type: 'trace',
+  entity_id: traceId,
+  name: 'latency_ms',
+  value: 324.5,
+  signal_type: 'numerical'
+});
+```
+
+### Auto-Detection of Signal Type
+
+```typescript
+// Type is automatically detected as 'boolean'
+await ze.signals.create({
+  entity_type: 'span',
+  entity_id: spanId,
+  name: 'success',
+  value: true
+});
+
+// Type is automatically detected as 'numerical'
+await ze.signals.create({
+  entity_type: 'span',
+  entity_id: spanId,
+  name: 'score',
+  value: 42
+});
+```
+
+### Bulk Signal Creation
+
+```typescript
+await ze.signals.createBulk({
+  signals: [
+    {
+      entity_type: 'span',
+      entity_id: 'span-1',
+      name: 'success',
+      value: true
+    },
+    {
+      entity_type: 'span',
+      entity_id: 'span-1',
+      name: 'latency_ms',
+      value: 150
+    },
+    {
+      entity_type: 'session',
+      entity_id: 'session-123',
+      name: 'user_satisfied',
+      value: true
+    }
+  ]
+});
+```
+
+### Tracking Custom Metrics
+
+```typescript
+// Track cost per request
+await ze.signals.create({
+  entity_type: 'completion',
+  entity_id: completionId,
+  name: 'cost_usd',
+  value: 0.0042
+});
+
+// Track token usage
+await ze.signals.create({
+  entity_type: 'completion',
+  entity_id: completionId,
+  name: 'tokens_used',
+  value: 1250
+});
+
+// Track quality score
+await ze.signals.create({
+  entity_type: 'completion',
+  entity_id: completionId,
+  name: 'quality_score',
+  value: 0.87
+});
+```
+
+## Related
+
+- [sendSignal()](/api/send-signal)
+- [sendBulkSignals()](/api/send-bulk-signals)
+- [Signals Concept](/concepts/signals)

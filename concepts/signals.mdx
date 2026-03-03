@@ -1,0 +1,425 @@
+---
+title: Signals
+description: Learn how to use boolean, numerical, and string signals to track metrics across spans, traces, sessions, and completions
+---
+
+Signals are metrics and flags that you attach to observability entities (spans, traces, sessions, or completions). They enable you to track business metrics, feature flags, and operational metrics alongside your traces.
+
+## Signal types
+
+ZeroEval supports three signal types:
+
+- **Boolean**: True/false flags (e.g., `cacheHit`, `isVipUser`, `hasErrors`)
+- **Numerical**: Numeric values (e.g., `itemCount`, `responseTime`, `score`)
+- **String**: Text values that can be auto-detected as boolean or numerical
+
+<Info>
+  Signal types are auto-detected based on the value type. You can also explicitly specify the type.
+</Info>
+
+Relevant code: [signals.ts:3-8](/home/daytona/workspace/source/src/observability/signals.ts:3-8)
+
+## Entity types
+
+You can attach signals to four entity types:
+
+- **Span**: Metrics for a single operation
+- **Trace**: Metrics for an entire trace tree
+- **Session**: Metrics across multiple traces
+- **Completion**: Metrics for LLM completions
+
+Relevant code: [signals.ts:10-16](/home/daytona/workspace/source/src/observability/signals.ts:10-16)
+
+## Adding signals to spans
+
+### Using span.addSignal()
+
+Add signals directly to the current span:
+
+```typescript
+import { tracer } from 'zeroeval';
+
+const span = tracer.startSpan('processOrder');
+
+// Add boolean signal
+span.addSignal('isPremiumUser', true);
+
+// Add numerical signal
+span.addSignal('itemCount', 5);
+
+// Add string signal (auto-detected as numerical)
+span.addSignal('totalPrice', '99.99');
+
+// Explicitly specify type
+span.addSignal('discountApplied', 'true', 'boolean');
+
+tracer.endSpan(span);
+```
+
+Relevant code: [Span.ts:63-92](/home/daytona/workspace/source/src/observability/Span.ts:63-92)
+
+### Using sendSpanSignal()
+
+Send a signal to the currently active span:
+
+```typescript
+import { sendSpanSignal, withSpan } from 'zeroeval';
+
+await withSpan({ name: 'processPayment' }, async () => {
+  const amount = 99.99;
+  const success = await chargeCard(amount);
+  
+  // Send signals to the current span
+  sendSpanSignal('paymentAmount', amount);
+  sendSpanSignal('paymentSuccess', success);
+});
+```
+
+Relevant code: [signals.ts:97-116](/home/daytona/workspace/source/src/signals.ts:97-116)
+
+## Adding signals to traces
+
+Trace signals apply to an entire trace (all spans sharing a `traceId`):
+
+```typescript
+import { sendTraceSignal, withSpan } from 'zeroeval';
+
+await withSpan({ name: 'handleRequest' }, async () => {
+  let apiCalls = 0;
+  
+  await withSpan({ name: 'fetchData' }, async () => {
+    apiCalls++;
+  });
+  
+  await withSpan({ name: 'processData' }, async () => {
+    apiCalls++;
+  });
+  
+  // Signal applies to the entire trace
+  sendTraceSignal('totalApiCalls', apiCalls);
+  sendTraceSignal('cachingEnabled', true);
+});
+```
+
+Relevant code: [signals.ts:48-70](/home/daytona/workspace/source/src/signals.ts:48-70)
+
+## Adding signals to sessions
+
+Session signals track metrics across multiple traces in the same session:
+
+```typescript
+import { sendSessionSignal, withSpan } from 'zeroeval';
+
+const sessionId = 'user-session-123';
+let totalRequests = 0;
+
+// First request
+await withSpan({
+  name: 'request1',
+  sessionId
+}, async () => {
+  totalRequests++;
+  sendSessionSignal('totalRequests', totalRequests);
+});
+
+// Second request
+await withSpan({
+  name: 'request2',
+  sessionId
+}, async () => {
+  totalRequests++;
+  sendSessionSignal('totalRequests', totalRequests);
+});
+
+// Add session-level metrics
+sendSessionSignal('userSatisfied', true);
+sendSessionSignal('sessionDurationMinutes', 15.5);
+```
+
+Relevant code: [signals.ts:72-95](/home/daytona/workspace/source/src/signals.ts:72-95)
+
+## Sending signals to specific entities
+
+For more control, send signals directly to any entity by ID:
+
+```typescript
+import { sendSignal } from 'zeroeval';
+
+// Send to a specific span
+await sendSignal('span', 'span-uuid-123', 'retryCount', 3);
+
+// Send to a specific trace
+await sendSignal('trace', 'trace-uuid-456', 'totalDuration', 1234);
+
+// Send to a specific session
+await sendSignal('session', 'session-uuid-789', 'errorRate', 0.05);
+
+// Send to a completion
+await sendSignal('completion', 'completion-uuid-012', 'userRating', 5);
+```
+
+Relevant code: [signals.ts:21-37](/home/daytona/workspace/source/src/signals.ts:21-37)
+
+## Bulk signals
+
+Send multiple signals in a single API call:
+
+```typescript
+import { sendBulkSignals } from 'zeroeval';
+
+await sendBulkSignals([
+  {
+    entity_type: 'trace',
+    entity_id: 'trace-123',
+    name: 'apiCallCount',
+    value: 5,
+    signal_type: 'numerical'
+  },
+  {
+    entity_type: 'session',
+    entity_id: 'session-456',
+    name: 'conversionSuccess',
+    value: true,
+    signal_type: 'boolean'
+  },
+  {
+    entity_type: 'span',
+    entity_id: 'span-789',
+    name: 'cacheHit',
+    value: false,
+    signal_type: 'boolean'
+  }
+]);
+```
+
+Relevant code: [signals.ts:39-45](/home/daytona/workspace/source/src/signals.ts:39-45)
+
+## Type detection
+
+### Automatic type detection
+
+Signal types are automatically detected from the value:
+
+```typescript
+import { detectSignalType } from 'zeroeval/observability/signals';
+
+detectSignalType(true);      // 'boolean'
+detectSignalType(42);        // 'numerical'
+detectSignalType('true');    // 'boolean'
+detectSignalType('123');     // 'numerical'
+detectSignalType('hello');   // 'boolean' (default)
+```
+
+### Explicit type specification
+
+You can override auto-detection:
+
+```typescript
+// Force string '123' to be treated as numerical
+span.addSignal('orderId', '123', 'numerical');
+
+// Force 'yes' to be treated as boolean
+span.addSignal('confirmed', 'yes', 'boolean');
+```
+
+Relevant code: [signals.ts:49-70](/home/daytona/workspace/source/src/observability/signals.ts:49-70)
+
+## Common use cases
+
+### Business metrics
+
+Track business KPIs alongside technical metrics:
+
+```typescript
+import { withSpan, sendSpanSignal, sendTraceSignal } from 'zeroeval';
+
+await withSpan({ name: 'processCheckout' }, async () => {
+  const cart = await getCart();
+  
+  // Span-level metrics
+  sendSpanSignal('cartValue', cart.total);
+  sendSpanSignal('itemCount', cart.items.length);
+  sendSpanSignal('hasCoupon', cart.coupon !== null);
+  
+  await processPayment(cart);
+  
+  // Trace-level metrics
+  sendTraceSignal('revenueGenerated', cart.total);
+  sendTraceSignal('conversionSuccess', true);
+});
+```
+
+### Feature flags
+
+Track which features are enabled:
+
+```typescript
+import { sendSpanSignal, withSpan } from 'zeroeval';
+
+await withSpan({ name: 'renderPage' }, async () => {
+  const flags = await getFeatureFlags();
+  
+  sendSpanSignal('newCheckoutEnabled', flags.newCheckout);
+  sendSpanSignal('recommendationsEnabled', flags.recommendations);
+  sendSpanSignal('darkModeEnabled', flags.darkMode);
+  
+  return renderWithFlags(flags);
+});
+```
+
+### Performance metrics
+
+Track custom performance indicators:
+
+```typescript
+import { tracer, sendSpanSignal } from 'zeroeval';
+
+const span = tracer.startSpan('databaseQuery');
+
+const startTime = Date.now();
+const result = await db.query(sql);
+const duration = Date.now() - startTime;
+
+sendSpanSignal('queryDurationMs', duration);
+sendSpanSignal('rowsReturned', result.rows.length);
+sendSpanSignal('cacheHit', result.fromCache);
+sendSpanSignal('indexUsed', result.usedIndex);
+
+tracer.endSpan(span);
+```
+
+### A/B testing
+
+Track experiment variants and outcomes:
+
+```typescript
+import { sendSessionSignal, withSpan } from 'zeroeval';
+
+const sessionId = 'user-session-123';
+const variant = Math.random() > 0.5 ? 'A' : 'B';
+
+await withSpan({
+  name: 'experimentSession',
+  sessionId
+}, async () => {
+  sendSessionSignal('experimentVariant', variant);
+  
+  const result = await runExperiment(variant);
+  
+  sendSessionSignal('conversionSuccess', result.converted);
+  sendSessionSignal('engagementScore', result.score);
+});
+```
+
+### Error tracking
+
+Track error rates and types:
+
+```typescript
+import { withSpan, sendTraceSignal, sendSessionSignal } from 'zeroeval';
+
+const sessionId = 'session-123';
+let errorCount = 0;
+
+await withSpan({ name: 'batchProcess', sessionId }, async () => {
+  for (const item of items) {
+    try {
+      await processItem(item);
+    } catch (error) {
+      errorCount++;
+      sendTraceSignal('hasErrors', true);
+      sendTraceSignal('errorType', error.name);
+    }
+  }
+  
+  sendSessionSignal('totalErrors', errorCount);
+  sendSessionSignal('errorRate', errorCount / items.length);
+});
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use descriptive signal names">
+    Choose clear, consistent names that indicate what you're measuring:
+    
+    ```typescript
+    // Good
+    sendSpanSignal('cacheHitRate', 0.95);
+    sendSpanSignal('isPremiumUser', true);
+    sendSpanSignal('responseTimeMs', 123);
+    
+    // Avoid
+    sendSpanSignal('rate', 0.95);
+    sendSpanSignal('premium', true);
+    sendSpanSignal('time', 123);
+    ```
+  </Accordion>
+
+  <Accordion title="Choose the right entity type">
+    Match the signal to the appropriate scope:
+    
+    ```typescript
+    // Span signals - operation-specific
+    sendSpanSignal('rowsProcessed', 100);
+    
+    // Trace signals - request-wide
+    sendTraceSignal('totalApiCalls', 5);
+    
+    // Session signals - cross-request
+    sendSessionSignal('totalRevenue', 299.99);
+    ```
+  </Accordion>
+
+  <Accordion title="Use explicit types when needed">
+    Override auto-detection for ambiguous values:
+    
+    ```typescript
+    // String IDs should be stored, not converted to numbers
+    span.addSignal('orderId', '00123', 'boolean');
+    
+    // Binary strings should be boolean, not numerical
+    span.addSignal('isEnabled', '1', 'boolean');
+    ```
+  </Accordion>
+
+  <Accordion title="Batch signals when possible">
+    Use bulk operations for better performance:
+    
+    ```typescript
+    // Good - single API call
+    await sendBulkSignals([
+      { entity_type: 'span', entity_id: span1, name: 'metric1', value: 1 },
+      { entity_type: 'span', entity_id: span2, name: 'metric2', value: 2 },
+      { entity_type: 'span', entity_id: span3, name: 'metric3', value: 3 }
+    ]);
+    
+    // Avoid - three API calls
+    await sendSignal('span', span1, 'metric1', 1);
+    await sendSignal('span', span2, 'metric2', 2);
+    await sendSignal('span', span3, 'metric3', 3);
+    ```
+  </Accordion>
+
+  <Accordion title="Don't overuse signals">
+    Only track metrics you'll actually use:
+    
+    ```typescript
+    // Good - actionable metrics
+    sendSpanSignal('errorRate', errorRate);
+    sendSpanSignal('p95Latency', p95);
+    
+    // Avoid - excessive detail
+    sendSpanSignal('timestamp1', Date.now());
+    sendSpanSignal('timestamp2', Date.now());
+    sendSpanSignal('timestamp3', Date.now());
+    // Use span timing instead
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Related concepts
+
+- [Spans](/concepts/spans) - Learn about span structure and metadata
+- [Tracing](/concepts/tracing) - Understand trace lifecycle
+- [Sessions](/concepts/sessions) - Group traces into sessions

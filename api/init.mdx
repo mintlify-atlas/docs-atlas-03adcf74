@@ -1,0 +1,156 @@
+---
+title: init()
+description: Initialize the ZeroEval SDK with your API key and configuration
+---
+
+## Overview
+
+The `init()` function initializes the ZeroEval SDK with your API credentials and configuration options. You must call this function before using any other SDK features.
+
+```typescript
+import * as ze from '@zeroeval/sdk';
+
+ze.init({
+  apiKey: 'your-api-key',
+  workspaceName: 'My Project'
+});
+```
+
+## Function Signature
+
+```typescript
+function init(opts?: InitOptions): void
+```
+
+## Parameters
+
+<ParamField path="opts" type="InitOptions" default="{}">
+  Configuration options for the SDK
+
+  <Expandable title="properties">
+    <ParamField path="apiKey" type="string" optional>
+      Your ZeroEval API key. If not provided, the SDK will read from the `ZEROEVAL_API_KEY` environment variable.
+    </ParamField>
+
+    <ParamField path="apiUrl" type="string" optional>
+      The ZeroEval API URL. Defaults to `https://api.zeroeval.com`. Override this for self-hosted instances.
+    </ParamField>
+
+    <ParamField path="workspaceName" type="string" default="Personal Workspace">
+      The name of your workspace. This helps organize traces and spans in the ZeroEval dashboard.
+    </ParamField>
+
+    <ParamField path="flushInterval" type="number" default={10}>
+      How often to flush spans to the backend, in seconds. Default is 10 seconds.
+    </ParamField>
+
+    <ParamField path="maxSpans" type="number" default={100}>
+      Maximum number of spans to buffer before triggering an automatic flush. Default is 100 spans.
+    </ParamField>
+
+    <ParamField path="collectCodeDetails" type="boolean" default={true}>
+      Whether to collect code-level details like function names and line numbers in traces.
+    </ParamField>
+
+    <ParamField path="integrations" type="Record<string, boolean>" optional>
+      Enable or disable specific integrations. By default, all available integrations are auto-detected and enabled.
+      
+      ```typescript
+      integrations: {
+        openai: true,
+        langchain: false
+      }
+      ```
+    </ParamField>
+
+    <ParamField path="debug" type="boolean" default={false}>
+      Enable debug logging. You can also enable debug mode by setting the `ZEROEVAL_DEBUG=true` environment variable.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Returns
+
+<ResponseField name="void" type="void">
+  This function does not return a value.
+</ResponseField>
+
+## Examples
+
+### Basic initialization
+
+```typescript
+import * as ze from '@zeroeval/sdk';
+
+ze.init({
+  apiKey: process.env.ZEROEVAL_API_KEY
+});
+```
+
+### Custom configuration
+
+```typescript
+ze.init({
+  apiKey: 'your-api-key',
+  workspaceName: 'Production',
+  flushInterval: 5,  // Flush every 5 seconds
+  maxSpans: 200,     // Buffer up to 200 spans
+  debug: true        // Enable debug logging
+});
+```
+
+### Using environment variables
+
+```typescript
+// Set ZEROEVAL_API_KEY and ZEROEVAL_WORKSPACE_NAME in your environment
+ze.init();
+```
+
+## Helper Functions
+
+### isInitialized()
+
+Check if the SDK has been initialized.
+
+```typescript
+function isInitialized(): boolean
+```
+
+**Example:**
+
+```typescript
+if (!ze.isInitialized()) {
+  ze.init({ apiKey: process.env.ZEROEVAL_API_KEY });
+}
+```
+
+### validateInit()
+
+Validate that the SDK has been properly initialized with required credentials. Returns `false` and logs an error if the API key or workspace name is missing.
+
+```typescript
+function validateInit(): boolean
+```
+
+**Example:**
+
+```typescript
+if (!ze.validateInit()) {
+  throw new Error('ZeroEval SDK not properly initialized');
+}
+```
+
+## Environment Variables
+
+You can configure the SDK using environment variables instead of passing options to `init()`:
+
+- `ZEROEVAL_API_KEY` - Your API key
+- `ZEROEVAL_API_URL` - Custom API URL (defaults to `https://api.zeroeval.com`)
+- `ZEROEVAL_WORKSPACE_NAME` - Workspace name
+- `ZEROEVAL_DEBUG` - Set to `true` to enable debug logging
+
+## Notes
+
+- You should call `init()` once at the start of your application, before using any tracing features
+- The SDK automatically sets up integrations for OpenAI, Vercel AI SDK, and LangChain if they are installed
+- In debug mode, the SDK logs all configuration values (with API key masked) to help troubleshoot setup issues

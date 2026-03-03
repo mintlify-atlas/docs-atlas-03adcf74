@@ -1,0 +1,421 @@
+---
+title: sendFeedback()
+description: Provide feedback on LLM completions for prompt optimization
+---
+
+## Overview
+
+The `sendFeedback()` function allows you to provide feedback on LLM completions, enabling ZeroEval to optimize your prompts. Positive feedback indicates the output was good, while negative feedback indicates it needs improvement.
+
+## Function Signature
+
+```typescript
+async function sendFeedback(
+  options: SendFeedbackOptions
+): Promise<PromptFeedbackResponse>
+```
+
+## Parameters
+
+<ParamField path="options" type="SendFeedbackOptions" required>
+  Configuration object for the feedback request
+
+  <Expandable title="SendFeedbackOptions properties">
+    <ParamField path="promptSlug" type="string" required>
+      The slug of the prompt (or task name for judges). This should match the `name` parameter used in `prompt()`.
+    </ParamField>
+
+    <ParamField path="completionId" type="string" required>
+      UUID of the span/completion to provide feedback on. You can get this from the current span using `getCurrentSpan()?.spanId`.
+    </ParamField>
+
+    <ParamField path="thumbsUp" type="boolean" required>
+      Indicates whether the feedback is positive or negative:
+      - `true`: Positive feedback (output was good)
+      - `false`: Negative feedback (output needs improvement)
+    </ParamField>
+
+    <ParamField path="reason" type="string">
+      Optional explanation of the feedback. Provides context on why the output was good or bad.
+
+      ```typescript
+      reason: "Response was helpful and accurate"
+      ```
+    </ParamField>
+
+    <ParamField path="expectedOutput" type="string">
+      Optional description of what the expected output should be. Particularly useful for negative feedback to guide optimization.
+
+      ```typescript
+      expectedOutput: "Should have mentioned the refund policy"
+      ```
+    </ParamField>
+
+    <ParamField path="metadata" type="Record<string, unknown>">
+      Optional additional metadata to attach to the feedback. Can include custom fields for your tracking needs.
+
+      ```typescript
+      metadata: {
+        user_id: "user-123",
+        session_id: "session-456"
+      }
+      ```
+    </ParamField>
+
+    <ParamField path="judgeId" type="string">
+      Optional judge automation ID. When provided, feedback is associated with the judge's evaluation span instead of the original span.
+      
+      Required when providing feedback for judge evaluations.
+    </ParamField>
+
+    <ParamField path="expectedScore" type="number">
+      Optional expected score for scored judge evaluations. Only valid when `judgeId` points to a scored judge.
+
+      ```typescript
+      expectedScore: 8.5
+      ```
+    </ParamField>
+
+    <ParamField path="scoreDirection" type="'too_high' | 'too_low'">
+      Optional direction indicating if the score was too high or too low. Only valid when `judgeId` points to a scored judge.
+
+      ```typescript
+      scoreDirection: "too_low"
+      ```
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Return Value
+
+Returns a `Promise<PromptFeedbackResponse>` containing the created feedback record:
+
+```typescript
+interface PromptFeedbackResponse {
+  id: string;                              // Feedback record ID
+  completion_id: string;                   // Completion/span ID
+  prompt_id: string;                       // Prompt ID
+  prompt_version_id: string;               // Specific version ID
+  project_id: string;                      // Project ID
+  thumbs_up: boolean;                      // Feedback direction
+  reason: string | null;                   // Explanation
+  expected_output: string | null;          // Expected output
+  metadata: Record<string, unknown>;       // Additional metadata
+  created_by: string;                      // Creator ID
+  created_at: string;                      // Creation timestamp
+  updated_at: string;                      // Update timestamp
+  expected_score: number | null;           // Expected score (judge)
+  score_direction: string | null;          // Score direction (judge)
+}
+```
+
+## Usage Examples
+
+### Basic Positive Feedback
+
+```typescript
+import * as ze from 'zeroeval';
+import { OpenAI } from 'openai';
+
+ze.init({ apiKey: process.env.ZEROEVAL_API_KEY });
+const openai = ze.wrap(new OpenAI());
+
+const systemPrompt = await ze.prompt({
+  name: "customer-support",
+  content: "You are a helpful customer support assistant."
+});
+
+const response = await openai.chat.completions.create({
+  model: "gpt-4o-mini",
+  messages: [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: "How do I return an item?" }
+  ]
+});
+
+// Get the span ID for feedback
+const spanId = ze.getCurrentSpan()?.spanId;
+
+if (spanId) {
+  await ze.sendFeedback({
+    promptSlug: "customer-support",
+    completionId: spanId,
+    thumbsUp: true,
+    reason: "Response was helpful and accurate"
+  });
+}
+```
+
+### Negative Feedback with Expected Output
+
+```typescript
+const response = await openai.chat.completions.create({
+  model: "gpt-4o-mini",
+  messages: [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: "What's your refund policy?" }
+  ]
+});
+
+const spanId = ze.getCurrentSpan()?.spanId;
+
+if (spanId) {
+  await ze.sendFeedback({
+    promptSlug: "customer-support",
+    completionId: spanId,
+    thumbsUp: false,
+    reason: "Didn't mention the 30-day return window",
+    expectedOutput: "Should clearly state that refunds are available within 30 days of purchase with original receipt."
+  });
+}
+```
+
+### Feedback with Custom Metadata
+
+```typescript
+const spanId = ze.getCurrentSpan()?.spanId;
+
+if (spanId) {
+  await ze.sendFeedback({
+    promptSlug: "customer-support",
+    completionId: spanId,
+    thumbsUp: true,
+    reason: "User was satisfied with the response",
+    metadata: {
+      user_id: "user-12345",
+      session_id: "session-67890",
+      satisfaction_score: 5,
+      response_time_ms: 1200
+    }
+  });
+}
+```
+
+### Feedback in a Complete Workflow
+
+```typescript
+import * as ze from 'zeroeval';
+import { OpenAI } from 'openai';
+
+ze.init({ apiKey: process.env.ZEROEVAL_API_KEY });
+const openai = ze.wrap(new OpenAI());
+
+async function handleCustomerQuery(userQuery: string, userId: string) {
+  const feedbackPrompt = await ze.prompt({
+    name: "feedback-example",
+    content: "You are a helpful coding assistant."
+  });
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: feedbackPrompt },
+      { role: "user", content: userQuery }
+    ],
+    max_tokens: 200
+  });
+
+  const output = response.choices[0].message.content;
+  console.log('Response:', output);
+
+  // Get the current span ID to use as completion ID
+  const spanId = ze.getCurrentSpan()?.spanId;
+
+  if (spanId) {
+    // Send positive feedback
+    await ze.sendFeedback({
+      promptSlug: "feedback-example",
+      completionId: spanId,
+      thumbsUp: true,
+      reason: "Clear and correct code example",
+      metadata: {
+        user_id: userId,
+        query_type: "coding_help"
+      }
+    });
+    console.log('Feedback sent successfully!');
+  }
+
+  return output;
+}
+
+await handleCustomerQuery(
+  "How do I reverse a string in JavaScript?",
+  "user-123"
+);
+```
+
+### Judge Feedback with Expected Score
+
+```typescript
+// When providing feedback on a judge evaluation
+const spanId = ze.getCurrentSpan()?.spanId;
+
+if (spanId) {
+  await ze.sendFeedback({
+    promptSlug: "quality-judge",
+    completionId: spanId,
+    thumbsUp: false,
+    judgeId: "judge-automation-id-here",
+    expectedScore: 8.5,
+    scoreDirection: "too_low",
+    reason: "The response quality was actually higher than the judge rated"
+  });
+}
+```
+
+### Collecting User Feedback
+
+```typescript
+// After showing the LLM response to the user
+async function collectUserFeedback(
+  spanId: string,
+  promptSlug: string,
+  userRating: 'thumbs_up' | 'thumbs_down',
+  userComment?: string
+) {
+  await ze.sendFeedback({
+    promptSlug,
+    completionId: spanId,
+    thumbsUp: userRating === 'thumbs_up',
+    reason: userComment || `User provided ${userRating}`,
+    metadata: {
+      feedback_source: 'user_interface',
+      timestamp: new Date().toISOString()
+    }
+  });
+}
+
+// Usage in your application
+const response = await openai.chat.completions.create({
+  model: "gpt-4o-mini",
+  messages: [...]
+});
+
+const spanId = ze.getCurrentSpan()?.spanId;
+if (spanId) {
+  // Show response to user and collect feedback
+  await collectUserFeedback(
+    spanId,
+    "customer-support",
+    "thumbs_up",
+    "Very helpful, exactly what I needed!"
+  );
+}
+```
+
+## Error Handling
+
+The function throws a `PromptRequestError` if the feedback request fails:
+
+```typescript
+try {
+  await ze.sendFeedback({
+    promptSlug: "customer-support",
+    completionId: spanId,
+    thumbsUp: true
+  });
+} catch (error) {
+  if (error instanceof ze.PromptRequestError) {
+    console.error('Feedback failed:', error.message);
+    console.error('Status:', error.status);
+  } else {
+    console.error('Unexpected error:', error);
+  }
+}
+```
+
+Common error scenarios:
+
+- **404 Not Found**: Completion ID or prompt slug doesn't exist
+- **401 Unauthorized**: Invalid or missing API key
+- **400 Bad Request**: Invalid parameters (e.g., missing required fields)
+- **500 Server Error**: Backend service error
+
+## Best Practices
+
+### Capture Span ID Early
+
+Capture the span ID immediately after the completion:
+
+```typescript
+const response = await openai.chat.completions.create({...});
+const spanId = ze.getCurrentSpan()?.spanId;
+
+// Store spanId for later feedback
+```
+
+### Provide Context with Reason
+
+Always include a `reason` to help guide optimization:
+
+```typescript
+await ze.sendFeedback({
+  promptSlug: "customer-support",
+  completionId: spanId,
+  thumbsUp: false,
+  reason: "Response was too technical for non-technical users"
+});
+```
+
+### Include Expected Output for Negative Feedback
+
+For negative feedback, provide `expectedOutput` to guide improvements:
+
+```typescript
+await ze.sendFeedback({
+  promptSlug: "customer-support",
+  completionId: spanId,
+  thumbsUp: false,
+  reason: "Missing key information",
+  expectedOutput: "Should include both the return policy and the refund timeline"
+});
+```
+
+### Use Metadata for Analytics
+
+Track custom metrics with metadata:
+
+```typescript
+await ze.sendFeedback({
+  promptSlug: "customer-support",
+  completionId: spanId,
+  thumbsUp: true,
+  metadata: {
+    user_segment: "premium",
+    resolution_time_seconds: 45,
+    issue_category: "billing"
+  }
+});
+```
+
+### Handle Missing Span Gracefully
+
+Always check if a span exists before sending feedback:
+
+```typescript
+const spanId = ze.getCurrentSpan()?.spanId;
+
+if (spanId) {
+  await ze.sendFeedback({...});
+} else {
+  console.warn('No active span for feedback');
+}
+```
+
+## Integration with Prompt Optimization
+
+Feedback you provide through `sendFeedback()` is used by ZeroEval to:
+
+1. **Identify problematic completions**: Negative feedback highlights areas for improvement
+2. **Train optimization models**: Feedback guides automatic prompt tuning
+3. **Track performance trends**: Monitor how prompt changes affect quality
+4. **Prioritize optimizations**: Focus on prompts with the most negative feedback
+
+When you use `prompt()` in auto-optimization mode, ZeroEval automatically serves improved versions based on the feedback collected.
+
+## See Also
+
+- [prompt()](/api/prompt) - Fetch and manage versioned prompts
+- [getCurrentSpan()](/api/get-current-span) - Get the current span for feedback
+- [Prompt Management Guide](/guides/prompt-management) - Learn about prompt optimization workflows

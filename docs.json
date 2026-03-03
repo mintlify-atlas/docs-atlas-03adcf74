@@ -1,122 +1,123 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "ZeroEval TypeScript SDK",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#2563eb",
+    "light": "#3b82f6",
+    "dark": "#1e40af"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/zeroeval/zeroeval-ts"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/zeroeval/zeroeval-ts"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart", "installation", "authentication"]
+          },
+          {
+            "group": "Core Concepts",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "concepts/tracing",
+              "concepts/spans",
+              "concepts/sessions",
+              "concepts/signals"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Integrations",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "integrations/overview",
+              "integrations/openai",
+              "integrations/vercel-ai",
+              "integrations/langchain"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Guides",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "guides/span-decorator",
+              "guides/manual-tracing",
+              "guides/prompt-management",
+              "guides/feedback",
+              "guides/streaming"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Core API",
             "pages": [
-              "api-reference/introduction"
+              "api/init",
+              "api/tracer",
+              "api/span",
+              "api/helpers"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Decorators & Context",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/span-decorator",
+              "api/with-span"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "api/wrap",
+              "api/wrap-openai",
+              "api/wrap-vercel-ai",
+              "api/langchain-callback-handler"
+            ]
+          },
+          {
+            "group": "Signals",
+            "pages": [
+              "api/send-signal",
+              "api/send-bulk-signals",
+              "api/send-trace-signal",
+              "api/send-session-signal",
+              "api/send-span-signal",
+              "api/get-entity-signals"
+            ]
+          },
+          {
+            "group": "Prompts",
+            "pages": [
+              "api/prompt"
+            ]
+          },
+          {
+            "group": "Feedback",
+            "pages": [
+              "api/send-feedback"
+            ]
+          },
+          {
+            "group": "Types",
+            "pages": [
+              "api/types/span-options",
+              "api/types/signal",
+              "api/types/prompt-options"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

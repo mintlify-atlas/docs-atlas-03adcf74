@@ -1,0 +1,375 @@
+---
+title: LangChain Integration
+description: Trace LangChain and LangGraph applications with ZeroEval
+---
+
+<RequestExample>
+```typescript LangChain with Callback
+import { ZeroEvalCallbackHandler } from '@zeroeval/sdk/langchain';
+import { ChatOpenAI } from '@langchain/openai';
+
+const model = new ChatOpenAI({
+  modelName: 'gpt-4',
+  callbacks: [new ZeroEvalCallbackHandler()]
+});
+
+const response = await model.invoke([
+  { role: 'user', content: 'Hello!' }
+]);
+```
+
+```typescript Global Handler
+import { 
+  setGlobalCallbackHandler,
+  ZeroEvalCallbackHandler 
+} from '@zeroeval/sdk/langchain';
+
+// Set once at app startup
+setGlobalCallbackHandler(new ZeroEvalCallbackHandler());
+
+// All LangChain operations are now traced
+import { ChatOpenAI } from '@langchain/openai';
+
+const model = new ChatOpenAI({ modelName: 'gpt-4' });
+const response = await model.invoke([...]);
+```
+
+```typescript LangGraph
+import { ZeroEvalCallbackHandler } from '@zeroeval/sdk/langchain';
+import { StateGraph } from '@langchain/langgraph';
+
+const workflow = new StateGraph({
+  // ... graph definition
+});
+
+const app = workflow.compile();
+
+const result = await app.invoke(
+  { messages: [...] },
+  { callbacks: [new ZeroEvalCallbackHandler()] }
+);
+```
+
+```typescript Cleanup
+import { 
+  setGlobalCallbackHandler,
+  unsetGlobalCallbackHandler,
+  ZeroEvalCallbackHandler 
+} from '@zeroeval/sdk/langchain';
+
+const handler = new ZeroEvalCallbackHandler();
+setGlobalCallbackHandler(handler);
+
+// Later, clean up
+unsetGlobalCallbackHandler();
+handler.destroy(); // Clean up resources
+```
+</RequestExample>
+
+## Overview
+
+The ZeroEval LangChain integration provides automatic tracing for LangChain and LangGraph applications through a callback handler. The handler captures spans for LLM calls, chains, tools, retrievers, and agents.
+
+<Note>
+The LangChain integration is exported from `@zeroeval/sdk/langchain`, not the main SDK export.
+</Note>
+
+## ZeroEvalCallbackHandler
+
+A callback handler that implements LangChain's `BaseCallbackHandler` interface to trace all operations.
+
+### Constructor
+
+```typescript
+class ZeroEvalCallbackHandler extends BaseCallbackHandler {
+  constructor(options?: ZeroEvalCallbackHandlerOptions)
+}
+```
+
+### Options
+
+<ParamField path="debug" type="boolean" default="false">
+  Enable debug mode. When `true`, includes `runId` and `parentRunId` in span attributes.
+</ParamField>
+
+<ParamField path="excludeMetadataProps" type="RegExp" default="/^(l[sc]_|langgraph_|__pregel_|checkpoint_ns)/">
+  Regular expression to filter out LangChain/LangGraph internal metadata properties from span attributes.
+</ParamField>
+
+<ParamField path="maxConcurrentSpans" type="number" default="1000">
+  Maximum number of concurrent spans before warnings are issued. Prevents memory issues in high-throughput scenarios.
+</ParamField>
+
+<ParamField path="spanCleanupIntervalMs" type="number" default="60000">
+  Interval in milliseconds for cleaning up orphaned spans (spans that weren't properly closed).
+</ParamField>
+
+### Methods
+
+<ResponseField name="destroy()" type="() => void">
+  Cleans up resources including the cleanup timer and any active spans. Call this when you're done with the handler.
+
+  ```typescript
+  const handler = new ZeroEvalCallbackHandler();
+  // ... use handler
+  handler.destroy();
+  ```
+</ResponseField>
+
+## Traced Operations
+
+The callback handler automatically traces:
+
+### LLM Calls
+
+- **Methods**: `handleLLMStart`, `handleLLMEnd`, `handleLLMError`
+- **Captures**: Model name, prompts, completions, token usage, temperature, and other parameters
+- **Span kind**: `llm`
+
+### Chat Model Calls
+
+- **Methods**: `handleChatModelStart`
+- **Captures**: Messages, model parameters, token usage, tool calls
+- **Span kind**: `llm`
+
+### Chains
+
+- **Methods**: `handleChainStart`, `handleChainEnd`, `handleChainError`
+- **Captures**: Chain inputs, outputs, nested chain execution
+- **Span kind**: `chain`
+
+### Tools
+
+- **Methods**: `handleToolStart`, `handleToolEnd`, `handleToolError`
+- **Captures**: Tool name, input arguments, output results
+- **Span kind**: `tool`
+
+### Agents
+
+- **Methods**: `handleAgentAction`, `handleAgentEnd`
+- **Captures**: Agent actions, tool selection, final outputs
+- **Span kind**: `agent`
+
+### Retrievers
+
+- **Methods**: `handleRetrieverStart`, `handleRetrieverEnd`, `handleRetrieverError`
+- **Captures**: Queries, retrieved documents, document count
+- **Span kind**: `retriever`
+
+## Global Callback Handler
+
+Set a callback handler globally to trace all LangChain operations without passing handlers to individual components.
+
+### setGlobalCallbackHandler
+
+```typescript
+function setGlobalCallbackHandler(handler: BaseCallbackHandler): void
+```
+
+Registers a callback handler to be used globally across your application.
+
+<ParamField path="handler" type="BaseCallbackHandler" required>
+  The callback handler instance to register globally.
+</ParamField>
+
+**Example:**
+
+```typescript
+import { 
+  setGlobalCallbackHandler, 
+  ZeroEvalCallbackHandler 
+} from '@zeroeval/sdk/langchain';
+
+setGlobalCallbackHandler(new ZeroEvalCallbackHandler({
+  debug: true
+}));
+```
+
+### unsetGlobalCallbackHandler
+
+```typescript
+function unsetGlobalCallbackHandler(): void
+```
+
+Removes the global callback handler.
+
+**Example:**
+
+```typescript
+import { unsetGlobalCallbackHandler } from '@zeroeval/sdk/langchain';
+
+unsetGlobalCallbackHandler();
+```
+
+<Warning>
+After calling `unsetGlobalCallbackHandler()`, remember to call `destroy()` on your handler instance to clean up resources:
+
+```typescript
+const handler = new ZeroEvalCallbackHandler();
+setGlobalCallbackHandler(handler);
+
+// Later
+unsetGlobalCallbackHandler();
+handler.destroy();
+```
+</Warning>
+
+## Usage Patterns
+
+### Per-Component Callbacks
+
+Pass the handler directly to individual components:
+
+```typescript
+import { ZeroEvalCallbackHandler } from '@zeroeval/sdk/langchain';
+import { ChatOpenAI } from '@langchain/openai';
+import { StringOutputParser } from '@langchain/core/output_parsers';
+import { ChatPromptTemplate } from '@langchain/core/prompts';
+
+const callbacks = [new ZeroEvalCallbackHandler()];
+
+const model = new ChatOpenAI({ callbacks });
+const parser = new StringOutputParser();
+const prompt = ChatPromptTemplate.fromTemplate('Tell me a joke about {topic}');
+
+const chain = prompt.pipe(model).pipe(parser);
+
+const result = await chain.invoke(
+  { topic: 'cats' },
+  { callbacks }
+);
+```
+
+### Global Callbacks
+
+Set once at startup for application-wide tracing:
+
+```typescript
+// app.ts (startup file)
+import { 
+  setGlobalCallbackHandler, 
+  ZeroEvalCallbackHandler 
+} from '@zeroeval/sdk/langchain';
+import * as ze from '@zeroeval/sdk';
+
+ze.init({ apiKey: process.env.ZEROEVAL_API_KEY });
+setGlobalCallbackHandler(new ZeroEvalCallbackHandler());
+
+// All subsequent LangChain operations are traced
+import { ChatOpenAI } from '@langchain/openai';
+
+const model = new ChatOpenAI({ modelName: 'gpt-4' });
+const response = await model.invoke([...]);
+```
+
+### LangGraph Tracing
+
+Trace LangGraph state machine executions:
+
+```typescript
+import { ZeroEvalCallbackHandler } from '@zeroeval/sdk/langchain';
+import { StateGraph, END } from '@langchain/langgraph';
+import { ChatOpenAI } from '@langchain/openai';
+
+interface State {
+  messages: BaseMessage[];
+}
+
+const workflow = new StateGraph<State>({
+  channels: { messages: { reducer: (x, y) => x.concat(y) } }
+});
+
+workflow.addNode('agent', async (state) => {
+  const model = new ChatOpenAI({ modelName: 'gpt-4' });
+  const response = await model.invoke(state.messages);
+  return { messages: [response] };
+});
+
+workflow.addEdge('agent', END);
+workflow.setEntryPoint('agent');
+
+const app = workflow.compile();
+
+const result = await app.invoke(
+  { messages: [{ role: 'user', content: 'Hello' }] },
+  { callbacks: [new ZeroEvalCallbackHandler()] }
+);
+```
+
+## Span Attributes
+
+Spans created by the callback handler include:
+
+<ResponseField name="type" type="string">
+  LangChain component type: `"llm"`, `"chain"`, `"tool"`, `"agent"`, or `"retriever"`
+</ResponseField>
+
+<ResponseField name="kind" type="string">
+  For LLM operations, set to `"llm"`
+</ResponseField>
+
+<ResponseField name="provider" type="string">
+  For LLM operations, defaults to `"openai"`
+</ResponseField>
+
+<ResponseField name="service.name" type="string">
+  Service identifier, typically matches provider
+</ResponseField>
+
+<ResponseField name="model" type="string">
+  Model name for LLM/chat operations
+</ResponseField>
+
+<ResponseField name="messages" type="array">
+  Chat messages for chat model operations
+</ResponseField>
+
+<ResponseField name="temperature" type="number">
+  Temperature parameter (if provided)
+</ResponseField>
+
+<ResponseField name="max_tokens" type="number">
+  Max tokens parameter (if provided)
+</ResponseField>
+
+<ResponseField name="tools" type="array">
+  Tool definitions (if provided)
+</ResponseField>
+
+<ResponseField name="inputTokens" type="number">
+  Prompt tokens consumed
+</ResponseField>
+
+<ResponseField name="outputTokens" type="number">
+  Completion tokens generated
+</ResponseField>
+
+<ResponseField name="throughput" type="number">
+  Tokens per second (calculated from duration and token usage)
+</ResponseField>
+
+<ResponseField name="runId" type="string">
+  LangChain run ID (only when `debug: true`)
+</ResponseField>
+
+<ResponseField name="parentRunId" type="string">
+  Parent run ID for nested operations (only when `debug: true`)
+</ResponseField>
+
+## Performance Optimizations
+
+The callback handler includes several optimizations:
+
+- **Object pooling**: Reuses metadata objects to reduce allocations
+- **Lazy serialization**: Defers JSON serialization until needed
+- **Orphan cleanup**: Automatically closes spans that weren't properly ended
+- **Metadata filtering**: Excludes internal LangChain/LangGraph properties via regex
+- **Concurrent span limits**: Prevents memory issues in high-throughput scenarios
+
+## Related Documentation
+
+- [`wrap()`](/api/wrap) - Auto-wrap AI clients
+- [`wrapOpenAI()`](/api/wrap-openai) - OpenAI-specific wrapper
+- [`wrapVercelAI()`](/api/wrap-vercel-ai) - Vercel AI SDK wrapper
+- [LangChain Documentation](https://js.langchain.com/docs/)
+- [LangGraph Documentation](https://langchain-ai.github.io/langgraphjs/)

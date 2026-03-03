@@ -1,0 +1,117 @@
+---
+title: Integrations overview
+description: Automatically trace LLM calls with ZeroEval's framework integrations
+---
+
+ZeroEval provides seamless integrations with popular LLM frameworks and SDKs. These integrations automatically capture traces, token usage, latency metrics, and more without requiring manual instrumentation.
+
+## Auto-detection with `wrap()`
+
+The `wrap()` function automatically detects the client type and applies the appropriate wrapper:
+
+```typescript
+import { OpenAI } from 'openai';
+import * as ai from 'ai';
+import * as ze from 'zeroeval';
+
+// Automatically detects OpenAI client
+const openai = ze.wrap(new OpenAI());
+
+// Automatically detects Vercel AI SDK module
+const wrappedAI = ze.wrap(ai);
+```
+
+The wrapper detects the client type by checking for specific properties and constructor names. If the client type is unsupported, it throws an error with helpful guidance.
+
+<Note>
+If you haven't called `ze.init()` and `ZEROEVAL_API_KEY` is set in your environment, the SDK will automatically initialize when you use `wrap()`.
+</Note>
+
+## Supported integrations
+
+<CardGroup cols={3}>
+  <Card title="OpenAI" icon="cloud" href="/integrations/openai">
+    Wrap OpenAI clients for automatic tracing
+  </Card>
+  <Card title="Vercel AI SDK" icon="bolt" href="/integrations/vercel-ai">
+    Wrap AI SDK functions for automatic tracing
+  </Card>
+  <Card title="LangChain" icon="link" href="/integrations/langchain">
+    Use callback handlers for LangChain and LangGraph
+  </Card>
+</CardGroup>
+
+## What gets traced
+
+All integrations automatically capture:
+
+- **Input and output data** - Prompts, messages, and completions
+- **Token usage** - Prompt tokens, completion tokens, and total tokens
+- **Latency metrics** - Time to first token (streaming), total duration
+- **Throughput** - Characters or tokens per second
+- **Model parameters** - Temperature, max tokens, top-p, etc.
+- **Errors** - Exception messages and stack traces
+- **Metadata** - Tags, custom attributes, and ZeroEval prompt metadata
+
+## Integration patterns
+
+### Proxy-based wrapping
+
+OpenAI and Vercel AI integrations use JavaScript proxies to intercept API calls:
+
+- Non-invasive - Original client behavior is preserved
+- Type-safe - Full TypeScript support with original types
+- Double-wrap protection - Safe to wrap multiple times
+- Automatic initialization - Uses `ZEROEVAL_API_KEY` from environment
+
+### Callback handlers
+
+LangChain uses the callback handler pattern:
+
+- Set globally with `setGlobalCallbackHandler()`
+- Or pass per-invocation in `callbacks` option
+- Traces chains, LLMs, tools, retrievers, and agents
+- Supports LangGraph workflows
+
+## Streaming support
+
+All integrations support streaming responses:
+
+- Captures time to first token as latency metric
+- Tracks throughput as characters per second
+- Automatically accumulates full response for tracing
+- Yields chunks transparently to your code
+
+## ZeroEval metadata extraction
+
+Integrations automatically detect and process ZeroEval prompt metadata embedded in system messages:
+
+```typescript
+const messages = [
+  {
+    role: 'system',
+    content: `<zeroeval task="greeting" prompt_version_id="abc123" variables='{"name":"Alice"}'>\nYou are a friendly assistant. Greet {{name}}.</zeroeval>`
+  },
+  { role: 'user', content: 'Hello!' }
+];
+```
+
+The wrapper will:
+
+1. Extract metadata (`task`, `prompt_version_id`, `variables`)
+2. Strip the `<zeroeval>` tags from the message
+3. Interpolate variables like `{{name}}`
+4. Attach metadata to the span for filtering and analysis
+5. Look up bound models from prompt versions
+
+See the [Prompts](/prompts/overview) guide for more details on prompt management.
+
+## Next steps
+
+Choose your integration to get started:
+
+<CardGroup cols={3}>
+  <Card title="OpenAI integration" href="/integrations/openai" />
+  <Card title="Vercel AI integration" href="/integrations/vercel-ai" />
+  <Card title="LangChain integration" href="/integrations/langchain" />
+</CardGroup>

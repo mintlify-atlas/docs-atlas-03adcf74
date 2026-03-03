@@ -1,0 +1,249 @@
+---
+title: tracer
+description: Global tracer singleton for managing spans and traces
+---
+
+## Overview
+
+The `tracer` is a singleton instance that manages the lifecycle of spans and traces in your application. It handles span creation, context propagation, buffering, and flushing to the ZeroEval backend.
+
+You typically don't need to use the tracer directly—the `@span` decorator and helper functions provide a higher-level API. However, the tracer is useful for advanced use cases like manual span management.
+
+```typescript
+import { tracer } from '@zeroeval/sdk';
+
+const span = tracer.startSpan('my-operation');
+try {
+  // Your code here
+  span.setIO({ query: 'hello' }, { result: 'world' });
+} catch (error) {
+  span.setError({ message: error.message });
+} finally {
+  tracer.endSpan(span);
+}
+```
+
+## Methods
+
+### startSpan()
+
+Start a new span. If called within an existing span context, the new span will automatically become a child of the current span.
+
+```typescript
+startSpan(
+  name: string,
+  opts?: {
+    attributes?: Record<string, unknown>;
+    sessionId?: string;
+    sessionName?: string;
+    tags?: Record<string, string>;
+  }
+): Span
+```
+
+#### Parameters
+
+<ParamField path="name" type="string" required>
+  The name of the span (e.g., `"generate-response"`, `"database-query"`).
+</ParamField>
+
+<ParamField path="opts" type="object" optional>
+  Additional options for the span
+
+  <Expandable title="properties">
+    <ParamField path="attributes" type="Record<string, unknown>" optional>
+      Custom attributes to attach to the span (e.g., model name, temperature).
+    </ParamField>
+
+    <ParamField path="sessionId" type="string" optional>
+      Session ID for grouping related traces. If not provided, a new session ID is generated for root spans.
+    </ParamField>
+
+    <ParamField path="sessionName" type="string" optional>
+      Human-readable name for the session.
+    </ParamField>
+
+    <ParamField path="tags" type="Record<string, string>" optional>
+      Tags for filtering and categorizing spans (e.g., `{ environment: "production", version: "1.0" }`).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+#### Returns
+
+<ResponseField name="span" type="Span">
+  A new Span instance that you must end by calling `tracer.endSpan(span)`.
+</ResponseField>
+
+#### Example
+
+```typescript
+const span = tracer.startSpan('process-request', {
+  attributes: { userId: '123' },
+  tags: { env: 'production' }
+});
+
+try {
+  // Your code
+} finally {
+  tracer.endSpan(span);
+}
+```
+
+### endSpan()
+
+End a span and add it to the flush buffer. If the span hasn't been ended manually, this method will call `span.end()` automatically.
+
+```typescript
+endSpan(span: Span): void
+```
+
+#### Parameters
+
+<ParamField path="span" type="Span" required>
+  The span to end.
+</ParamField>
+
+#### Example
+
+```typescript
+const span = tracer.startSpan('my-operation');
+// ... do work ...
+tracer.endSpan(span);
+```
+
+### currentSpan()
+
+Get the currently active span in the current async context, or `undefined` if there is no active span.
+
+```typescript
+currentSpan(): Span | undefined
+```
+
+#### Returns
+
+<ResponseField name="span" type="Span | undefined">
+  The currently active span, or `undefined` if no span is active.
+</ResponseField>
+
+#### Example
+
+```typescript
+const current = tracer.currentSpan();
+if (current) {
+  current.setIO({ input: 'data' });
+}
+```
+
+### flush()
+
+Immediately flush all buffered spans to the ZeroEval backend. This is called automatically based on `flushInterval` and `maxSpans` configuration, but you can call it manually if needed.
+
+```typescript
+flush(): Promise<void>
+```
+
+#### Returns
+
+<ResponseField name="promise" type="Promise<void>">
+  A promise that resolves when the flush completes. If the flush fails, spans are re-added to the buffer for retry.
+</ResponseField>
+
+#### Example
+
+```typescript
+// Flush before shutting down
+await tracer.flush();
+```
+
+### configure()
+
+Update tracer configuration after initialization. This is called automatically by `init()`, but you can use it to change settings at runtime.
+
+```typescript
+configure(opts?: {
+  flushInterval?: number;
+  maxSpans?: number;
+  collectCodeDetails?: boolean;
+  integrations?: Record<string, boolean>;
+}): void
+```
+
+#### Parameters
+
+<ParamField path="opts" type="object" optional>
+  Configuration options to update
+
+  <Expandable title="properties">
+    <ParamField path="flushInterval" type="number" optional>
+      How often to flush spans to the backend, in seconds.
+    </ParamField>
+
+    <ParamField path="maxSpans" type="number" optional>
+      Maximum number of spans to buffer before triggering an automatic flush.
+    </ParamField>
+
+    <ParamField path="collectCodeDetails" type="boolean" optional>
+      Whether to collect code-level details in traces.
+    </ParamField>
+
+    <ParamField path="integrations" type="Record<string, boolean>" optional>
+      Enable or disable specific integrations.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+#### Example
+
+```typescript
+tracer.configure({
+  flushInterval: 5,
+  maxSpans: 50
+});
+```
+
+### shutdown()
+
+Flush remaining spans and tear down integrations. This is called automatically on process exit (`beforeExit`, `SIGINT`, `SIGTERM`), but you can call it manually for graceful shutdown.
+
+```typescript
+shutdown(): void
+```
+
+#### Example
+
+```typescript
+process.on('SIGTERM', () => {
+  tracer.shutdown();
+  process.exit(0);
+});
+```
+
+## Context Propagation
+
+The tracer uses Node.js `AsyncLocalStorage` to automatically propagate span context across async boundaries. This means child spans automatically inherit the parent span's context without manual threading.
+
+```typescript
+const parentSpan = tracer.startSpan('parent');
+
+await someAsyncFunction(); // Child spans created here will inherit parent context
+
+tracer.endSpan(parentSpan);
+```
+
+## Buffering and Flushing
+
+The tracer buffers completed spans and flushes them to the backend in batches:
+
+1. **Time-based flushing**: Spans are flushed every `flushInterval` seconds (default: 10s)
+2. **Size-based flushing**: Spans are flushed when the buffer reaches `maxSpans` (default: 100)
+3. **Trace completion**: Spans are buffered per trace until the root span completes, then moved to the main buffer
+
+This batching approach minimizes network overhead while ensuring traces are sent as complete units.
+
+## Notes
+
+- The tracer is a singleton—there is one global instance per process
+- Spans are automatically ordered parent-first before flushing to ensure proper trace reconstruction
+- Failed flushes are retried by re-adding spans to the buffer
+- The tracer maintains separate buffers for active traces and completed spans

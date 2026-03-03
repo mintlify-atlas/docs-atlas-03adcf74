@@ -1,0 +1,195 @@
+---
+title: Installation
+description: Install the ZeroEval TypeScript SDK in your project
+---
+
+## Package managers
+
+You can install the ZeroEval SDK using any modern JavaScript package manager:
+
+<CodeGroup>
+  ```bash npm
+  npm install zeroeval
+  ```
+
+  ```bash yarn
+  yarn add zeroeval
+  ```
+
+  ```bash pnpm
+  pnpm add zeroeval
+  ```
+
+  ```bash bun
+  bun add zeroeval
+  ```
+</CodeGroup>
+
+## Requirements
+
+### Node version
+
+The ZeroEval SDK requires Node.js 18.0.0 or higher.
+
+```json package.json
+{
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
+```
+
+### Runtime support
+
+The SDK works in multiple JavaScript runtimes:
+
+- **Node.js** 18+
+- **Bun** (latest version)
+- **Browser** environments (Vite, Next.js, etc.)
+
+## Peer dependencies
+
+The ZeroEval SDK includes automatic integrations with popular AI libraries. These are all **optional peer dependencies** that you only need to install if you're using the corresponding integration.
+
+### OpenAI
+
+If you're using the OpenAI SDK, install it alongside ZeroEval:
+
+<CodeGroup>
+  ```bash npm
+  npm install openai
+  ```
+
+  ```bash yarn
+  yarn add openai
+  ```
+
+  ```bash pnpm
+  pnpm add openai
+  ```
+
+  ```bash bun
+  bun add openai
+  ```
+</CodeGroup>
+
+**Supported versions:** OpenAI SDK v5.8.2+ or v6.0.0+
+
+### Vercel AI SDK
+
+For Vercel AI SDK integration:
+
+<CodeGroup>
+  ```bash npm
+  npm install ai @ai-sdk/openai
+  ```
+
+  ```bash yarn
+  yarn add ai @ai-sdk/openai
+  ```
+
+  ```bash pnpm
+  pnpm add ai @ai-sdk/openai
+  ```
+
+  ```bash bun
+  bun add ai @ai-sdk/openai
+  ```
+</CodeGroup>
+
+**Supported versions:**
+- `ai`: 5.0.0-beta.28+
+- `@ai-sdk/openai`: 2.0.0+
+
+### LangChain
+
+For LangChain or LangGraph integration:
+
+<CodeGroup>
+  ```bash npm
+  npm install langchain @langchain/core
+  ```
+
+  ```bash yarn
+  yarn add langchain @langchain/core
+  ```
+
+  ```bash pnpm
+  pnpm add langchain @langchain/core
+  ```
+
+  ```bash bun
+  bun add langchain @langchain/core
+  ```
+</CodeGroup>
+
+**Supported versions:**
+- `langchain`: 0.3.29+
+- `@langchain/core`: 0.3.62+
+- `@langchain/langgraph`: 0.3.6+ (optional)
+
+<Note>
+  All peer dependencies are optional. The SDK will only use integrations for libraries you have installed.
+</Note>
+
+## Module format
+
+The SDK supports both ESM and CommonJS:
+
+### ESM (recommended)
+
+```typescript
+import * as ze from "zeroeval";
+
+ze.init();
+```
+
+### CommonJS
+
+```javascript
+const ze = require("zeroeval");
+
+ze.init();
+```
+
+## TypeScript support
+
+The SDK includes full TypeScript definitions out of the box. No additional `@types` packages are needed.
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "experimentalDecorators": true // Required for @span decorator
+  }
+}
+```
+
+<Warning>
+  If you plan to use the `@span` decorator syntax, you must enable `experimentalDecorators: true` in your TypeScript configuration.
+</Warning>
+
+## Verify installation
+
+After installation, verify the SDK is working correctly:
+
+```typescript
+import * as ze from "zeroeval";
+
+ze.init({ apiKey: "your-api-key" });
+
+console.log("SDK initialized:", ze.isInitialized());
+// Output: SDK initialized: true
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/authentication">
+    Set up your API keys and authenticate
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build your first traced application
+  </Card>
+</CardGroup>
