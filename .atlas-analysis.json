@@ -1,0 +1,146 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "ZeroEval TypeScript SDK",
+  "projectDescription": "Observability, tracing, and monitoring SDK for AI products with automatic integrations for OpenAI, Vercel AI SDK, and LangChain/LangGraph.",
+  "theme": "aspen",
+  "primaryColor": "#2563eb",
+  "lightColor": "#3b82f6",
+  "darkColor": "#1e40af",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart", "installation", "authentication"]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/tracing",
+              "concepts/spans",
+              "concepts/sessions",
+              "concepts/signals"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/overview",
+              "integrations/openai",
+              "integrations/vercel-ai",
+              "integrations/langchain"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/span-decorator",
+              "guides/manual-tracing",
+              "guides/prompt-management",
+              "guides/feedback",
+              "guides/streaming"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core API",
+            "pages": [
+              "api/init",
+              "api/tracer",
+              "api/span",
+              "api/helpers"
+            ]
+          },
+          {
+            "group": "Decorators & Context",
+            "pages": [
+              "api/span-decorator",
+              "api/with-span"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "api/wrap",
+              "api/wrap-openai",
+              "api/wrap-vercel-ai",
+              "api/langchain-callback-handler"
+            ]
+          },
+          {
+            "group": "Signals",
+            "pages": [
+              "api/send-signal",
+              "api/send-bulk-signals",
+              "api/send-trace-signal",
+              "api/send-session-signal",
+              "api/send-span-signal",
+              "api/get-entity-signals"
+            ]
+          },
+          {
+            "group": "Prompts",
+            "pages": [
+              "api/prompt"
+            ]
+          },
+          {
+            "group": "Feedback",
+            "pages": [
+              "api/send-feedback"
+            ]
+          },
+          {
+            "group": "Types",
+            "pages": [
+              "api/types/span-options",
+              "api/types/signal",
+              "api/types/prompt-options"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Span-based tracing with AsyncLocalStorage context management",
+    "Automatic integrations for OpenAI, Vercel AI SDK, and LangChain/LangGraph",
+    "Decorator and function wrapper patterns for easy instrumentation",
+    "Signals API for boolean, numerical, and string metrics",
+    "Content-addressed prompt management with version control",
+    "Feedback API for LLM completions",
+    "Streaming support with latency and throughput metrics",
+    "Automatic token usage tracking and cost monitoring",
+    "Works in Node.js 18+, Bun, and browser environments",
+    "Dual ESM/CJS output with full TypeScript support"
+  ],
+  "publicApiSurface": [
+    "init() - Initialize the SDK with configuration",
+    "span() - Decorator for automatic tracing",
+    "withSpan() - Context manager for manual tracing",
+    "tracer - Singleton tracer instance",
+    "wrap() - Auto-detect and wrap OpenAI or Vercel AI clients",
+    "wrapOpenAI() - Wrap OpenAI client for automatic tracing",
+    "wrapVercelAI() - Wrap Vercel AI SDK for automatic tracing",
+    "ZeroEvalCallbackHandler - LangChain callback handler",
+    "setGlobalCallbackHandler() - Set global LangChain handler",
+    "sendSignal() - Send signal to specific entity",
+    "sendBulkSignals() - Send multiple signals in bulk",
+    "sendTraceSignal() - Send signal to current trace",
+    "sendSessionSignal() - Send signal to current session",
+    "sendSpanSignal() - Send signal to current span",
+    "getEntitySignals() - Retrieve signals for an entity",
+    "prompt() - Version-aware prompt management",
+    "sendFeedback() - Send feedback on LLM completions",
+    "getCurrentSpan() - Get current span from context",
+    "getCurrentTrace() - Get current trace ID",
+    "getCurrentSession() - Get current session ID",
+    "setTag() - Add tags to current span"
+  ]
+}
