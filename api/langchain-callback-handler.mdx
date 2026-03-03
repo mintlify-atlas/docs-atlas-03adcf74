@@ -5,7 +5,7 @@ description: Trace LangChain and LangGraph applications with ZeroEval
 
 <RequestExample>
 ```typescript LangChain with Callback
-import { ZeroEvalCallbackHandler } from '@zeroeval/sdk/langchain';
+import { ZeroEvalCallbackHandler } from 'zeroeval/langchain';
 import { ChatOpenAI } from '@langchain/openai';
 
 const model = new ChatOpenAI({
@@ -22,7 +22,7 @@ const response = await model.invoke([
 import { 
   setGlobalCallbackHandler,
   ZeroEvalCallbackHandler 
-} from '@zeroeval/sdk/langchain';
+} from 'zeroeval/langchain';
 
 // Set once at app startup
 setGlobalCallbackHandler(new ZeroEvalCallbackHandler());
@@ -35,7 +35,7 @@ const response = await model.invoke([...]);
 ```
 
 ```typescript LangGraph
-import { ZeroEvalCallbackHandler } from '@zeroeval/sdk/langchain';
+import { ZeroEvalCallbackHandler } from 'zeroeval/langchain';
 import { StateGraph } from '@langchain/langgraph';
 
 const workflow = new StateGraph({
@@ -53,15 +53,15 @@ const result = await app.invoke(
 ```typescript Cleanup
 import { 
   setGlobalCallbackHandler,
-  unsetGlobalCallbackHandler,
+  clearGlobalHandler,
   ZeroEvalCallbackHandler 
-} from '@zeroeval/sdk/langchain';
+} from 'zeroeval/langchain';
 
 const handler = new ZeroEvalCallbackHandler();
 setGlobalCallbackHandler(handler);
 
 // Later, clean up
-unsetGlobalCallbackHandler();
+clearGlobalHandler();
 handler.destroy(); // Clean up resources
 ```
 </RequestExample>
@@ -71,7 +71,7 @@ handler.destroy(); // Clean up resources
 The ZeroEval LangChain integration provides automatic tracing for LangChain and LangGraph applications through a callback handler. The handler captures spans for LLM calls, chains, tools, retrievers, and agents.
 
 <Note>
-The LangChain integration is exported from `@zeroeval/sdk/langchain`, not the main SDK export.
+The LangChain integration is exported from `zeroeval/langchain`, not the main SDK export.
 </Note>
 
 ## ZeroEvalCallbackHandler
@@ -178,17 +178,17 @@ Registers a callback handler to be used globally across your application.
 import { 
   setGlobalCallbackHandler, 
   ZeroEvalCallbackHandler 
-} from '@zeroeval/sdk/langchain';
+} from 'zeroeval/langchain';
 
 setGlobalCallbackHandler(new ZeroEvalCallbackHandler({
   debug: true
 }));
 ```
 
-### unsetGlobalCallbackHandler
+### clearGlobalHandler
 
 ```typescript
-function unsetGlobalCallbackHandler(): void
+function clearGlobalHandler(): void
 ```
 
 Removes the global callback handler.
@@ -196,23 +196,44 @@ Removes the global callback handler.
 **Example:**
 
 ```typescript
-import { unsetGlobalCallbackHandler } from '@zeroeval/sdk/langchain';
+import { clearGlobalHandler } from 'zeroeval/langchain';
 
-unsetGlobalCallbackHandler();
+clearGlobalHandler();
 ```
 
 <Warning>
-After calling `unsetGlobalCallbackHandler()`, remember to call `destroy()` on your handler instance to clean up resources:
+After calling `clearGlobalHandler()`, remember to call `destroy()` on your handler instance to clean up resources:
 
 ```typescript
 const handler = new ZeroEvalCallbackHandler();
 setGlobalCallbackHandler(handler);
 
 // Later
-unsetGlobalCallbackHandler();
+clearGlobalHandler();
 handler.destroy();
 ```
 </Warning>
+
+### getGlobalHandler
+
+```typescript
+function getGlobalHandler(): BaseCallbackHandler | undefined
+```
+
+Retrieves the currently registered global callback handler, if any.
+
+**Returns:** The global handler instance or `undefined` if no handler is set.
+
+**Example:**
+
+```typescript
+import { getGlobalHandler, ZeroEvalCallbackHandler } from 'zeroeval/langchain';
+
+const handler = getGlobalHandler();
+if (handler instanceof ZeroEvalCallbackHandler) {
+  console.log('ZeroEval handler is active');
+}
+```
 
 ## Usage Patterns
 
@@ -221,7 +242,7 @@ handler.destroy();
 Pass the handler directly to individual components:
 
 ```typescript
-import { ZeroEvalCallbackHandler } from '@zeroeval/sdk/langchain';
+import { ZeroEvalCallbackHandler } from 'zeroeval/langchain';
 import { ChatOpenAI } from '@langchain/openai';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
@@ -249,8 +270,8 @@ Set once at startup for application-wide tracing:
 import { 
   setGlobalCallbackHandler, 
   ZeroEvalCallbackHandler 
-} from '@zeroeval/sdk/langchain';
-import * as ze from '@zeroeval/sdk';
+} from 'zeroeval/langchain';
+import * as ze from 'zeroeval';
 
 ze.init({ apiKey: process.env.ZEROEVAL_API_KEY });
 setGlobalCallbackHandler(new ZeroEvalCallbackHandler());
@@ -267,7 +288,7 @@ const response = await model.invoke([...]);
 Trace LangGraph state machine executions:
 
 ```typescript
-import { ZeroEvalCallbackHandler } from '@zeroeval/sdk/langchain';
+import { ZeroEvalCallbackHandler } from 'zeroeval/langchain';
 import { StateGraph, END } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 

@@ -10,7 +10,7 @@ A `Span` represents a single operation in your application, such as an API call,
 You typically create spans using the `@span` decorator or `tracer.startSpan()`, but you can also instantiate the `Span` class directly.
 
 ```typescript
-import { Span } from '@zeroeval/sdk';
+import { Span } from 'zeroeval';
 
 const span = new Span('my-operation');
 span.setIO({ input: 'data' }, { output: 'result' });
@@ -280,7 +280,7 @@ console.log(json);
 ### Manual span creation
 
 ```typescript
-import { tracer, Span } from '@zeroeval/sdk';
+import { tracer, Span } from 'zeroeval';
 
 const span = tracer.startSpan('my-operation');
 try {

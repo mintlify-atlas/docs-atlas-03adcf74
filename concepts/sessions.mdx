@@ -22,7 +22,6 @@ Each session has:
 - **Session name**: An optional human-readable name
 - **Session tags**: Tags applied to all traces in the session
 
-Relevant code: [Span.ts:19-20](/home/daytona/workspace/source/src/observability/Span.ts:19-20)
 
 ## Creating sessions
 
@@ -88,7 +87,6 @@ await withSpan({
 });
 ```
 
-Relevant code: [Tracer.ts:117-122](/home/daytona/workspace/source/src/observability/Tracer.ts:117-122)
 
 ## Session inheritance
 
@@ -116,7 +114,6 @@ await withSpan({
 });
 ```
 
-Relevant code: [Tracer.ts:111-112](/home/daytona/workspace/source/src/observability/Tracer.ts:111-112)
 
 ## Session tags
 
@@ -153,7 +150,6 @@ tracer.addSessionTags('session-123', {
 // Tags are applied to the span created above
 ```
 
-Relevant code: [Tracer.ts:190-197](/home/daytona/workspace/source/src/observability/Tracer.ts:190-197)
 
 ## Session signals
 
@@ -174,7 +170,6 @@ await withSpan({
 });
 ```
 
-Relevant code: [signals.ts:72-95](/home/daytona/workspace/source/src/signals.ts:72-95)
 
 ## Common use cases
 

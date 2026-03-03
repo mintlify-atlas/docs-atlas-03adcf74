@@ -17,7 +17,6 @@ ZeroEval supports three signal types:
   Signal types are auto-detected based on the value type. You can also explicitly specify the type.
 </Info>
 
-Relevant code: [signals.ts:3-8](/home/daytona/workspace/source/src/observability/signals.ts:3-8)
 
 ## Entity types
 
@@ -28,7 +27,6 @@ You can attach signals to four entity types:
 - **Session**: Metrics across multiple traces
 - **Completion**: Metrics for LLM completions
 
-Relevant code: [signals.ts:10-16](/home/daytona/workspace/source/src/observability/signals.ts:10-16)
 
 ## Adding signals to spans
 
@@ -56,7 +54,6 @@ span.addSignal('discountApplied', 'true', 'boolean');
 tracer.endSpan(span);
 ```
 
-Relevant code: [Span.ts:63-92](/home/daytona/workspace/source/src/observability/Span.ts:63-92)
 
 ### Using sendSpanSignal()
 
@@ -75,7 +72,6 @@ await withSpan({ name: 'processPayment' }, async () => {
 });
 ```
 
-Relevant code: [signals.ts:97-116](/home/daytona/workspace/source/src/signals.ts:97-116)
 
 ## Adding signals to traces
 
@@ -101,7 +97,6 @@ await withSpan({ name: 'handleRequest' }, async () => {
 });
 ```
 
-Relevant code: [signals.ts:48-70](/home/daytona/workspace/source/src/signals.ts:48-70)
 
 ## Adding signals to sessions
 
@@ -136,7 +131,6 @@ sendSessionSignal('userSatisfied', true);
 sendSessionSignal('sessionDurationMinutes', 15.5);
 ```
 
-Relevant code: [signals.ts:72-95](/home/daytona/workspace/source/src/signals.ts:72-95)
 
 ## Sending signals to specific entities
 
@@ -158,7 +152,6 @@ await sendSignal('session', 'session-uuid-789', 'errorRate', 0.05);
 await sendSignal('completion', 'completion-uuid-012', 'userRating', 5);
 ```
 
-Relevant code: [signals.ts:21-37](/home/daytona/workspace/source/src/signals.ts:21-37)
 
 ## Bulk signals
 
@@ -192,7 +185,6 @@ await sendBulkSignals([
 ]);
 ```
 
-Relevant code: [signals.ts:39-45](/home/daytona/workspace/source/src/signals.ts:39-45)
 
 ## Type detection
 
@@ -222,7 +214,6 @@ span.addSignal('orderId', '123', 'numerical');
 span.addSignal('confirmed', 'yes', 'boolean');
 ```
 
-Relevant code: [signals.ts:49-70](/home/daytona/workspace/source/src/observability/signals.ts:49-70)
 
 ## Common use cases
 

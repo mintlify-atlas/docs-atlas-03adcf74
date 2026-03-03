@@ -8,7 +8,7 @@ description: Utility functions for working with spans, traces, and sessions
 The helper functions provide convenient access to the current span context and enable you to attach tags to spans, traces, and sessions without direct access to the tracer.
 
 ```typescript
-import { getCurrentSpan, setTag } from '@zeroeval/sdk';
+import { getCurrentSpan, setTag } from 'zeroeval';
 
 const span = getCurrentSpan();
 if (span) {
@@ -35,7 +35,7 @@ function getCurrentSpan(): Span | undefined
 #### Example
 
 ```typescript
-import { getCurrentSpan } from '@zeroeval/sdk';
+import { getCurrentSpan } from 'zeroeval';
 
 function logCurrentOperation() {
   const span = getCurrentSpan();
@@ -63,7 +63,7 @@ function getCurrentTrace(): string | undefined
 #### Example
 
 ```typescript
-import { getCurrentTrace, setTag } from '@zeroeval/sdk';
+import { getCurrentTrace, setTag } from 'zeroeval';
 
 function tagCurrentTrace() {
   const traceId = getCurrentTrace();
@@ -90,7 +90,7 @@ function getCurrentSession(): string | undefined
 #### Example
 
 ```typescript
-import { getCurrentSession, setTag } from '@zeroeval/sdk';
+import { getCurrentSession, setTag } from 'zeroeval';
 
 function tagUserSession(userId: string) {
   const sessionId = getCurrentSession();
@@ -137,7 +137,7 @@ function setTag(
 **Tag a span directly:**
 
 ```typescript
-import { getCurrentSpan, setTag } from '@zeroeval/sdk';
+import { getCurrentSpan, setTag } from 'zeroeval';
 
 const span = getCurrentSpan();
 setTag(span, { 
@@ -149,7 +149,7 @@ setTag(span, {
 **Tag all spans in a trace:**
 
 ```typescript
-import { getCurrentTrace, setTag } from '@zeroeval/sdk';
+import { getCurrentTrace, setTag } from 'zeroeval';
 
 const traceId = getCurrentTrace();
 if (traceId) {
@@ -163,7 +163,7 @@ if (traceId) {
 **Tag all spans in a session:**
 
 ```typescript
-import { getCurrentSession, setTag } from '@zeroeval/sdk';
+import { getCurrentSession, setTag } from 'zeroeval';
 
 const sessionId = getCurrentSession();
 if (sessionId) {
@@ -180,7 +180,7 @@ if (sessionId) {
 ### Conditional tagging based on results
 
 ```typescript
-import { getCurrentSpan, setTag } from '@zeroeval/sdk';
+import { getCurrentSpan, setTag } from 'zeroeval';
 
 function processRequest(data: any) {
   const span = getCurrentSpan();
@@ -205,7 +205,7 @@ function processRequest(data: any) {
 ### Tagging with user context
 
 ```typescript
-import { getCurrentSession, setTag } from '@zeroeval/sdk';
+import { getCurrentSession, setTag } from 'zeroeval';
 
 function authenticateUser(userId: string, role: string) {
   const sessionId = getCurrentSession();
@@ -223,7 +223,7 @@ function authenticateUser(userId: string, role: string) {
 ### Tagging entire traces for analysis
 
 ```typescript
-import { getCurrentTrace, setTag } from '@zeroeval/sdk';
+import { getCurrentTrace, setTag } from 'zeroeval';
 
 async function handleRequest(req: Request) {
   const response = await processRequest(req);

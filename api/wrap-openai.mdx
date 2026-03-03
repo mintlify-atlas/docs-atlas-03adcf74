@@ -6,7 +6,7 @@ description: Wrap OpenAI client instances with automatic tracing
 <RequestExample>
 ```typescript Basic Usage
 import { OpenAI } from 'openai';
-import { wrapOpenAI } from '@zeroeval/sdk';
+import { wrapOpenAI } from 'zeroeval';
 
 const client = wrapOpenAI(new OpenAI());
 
@@ -18,7 +18,7 @@ const completion = await client.chat.completions.create({
 
 ```typescript Streaming
 import { OpenAI } from 'openai';
-import { wrapOpenAI } from '@zeroeval/sdk';
+import { wrapOpenAI } from 'zeroeval';
 
 const client = wrapOpenAI(new OpenAI());
 
@@ -35,7 +35,7 @@ for await (const chunk of stream) {
 
 ```typescript Embeddings
 import { OpenAI } from 'openai';
-import { wrapOpenAI } from '@zeroeval/sdk';
+import { wrapOpenAI } from 'zeroeval';
 
 const client = wrapOpenAI(new OpenAI());
 

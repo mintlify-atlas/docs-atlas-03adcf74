@@ -8,7 +8,7 @@ description: Initialize the ZeroEval SDK with your API key and configuration
 The `init()` function initializes the ZeroEval SDK with your API credentials and configuration options. You must call this function before using any other SDK features.
 
 ```typescript
-import * as ze from '@zeroeval/sdk';
+import * as ze from 'zeroeval';
 
 ze.init({
   apiKey: 'your-api-key',
@@ -80,7 +80,7 @@ function init(opts?: InitOptions): void
 ### Basic initialization
 
 ```typescript
-import * as ze from '@zeroeval/sdk';
+import * as ze from 'zeroeval';
 
 ze.init({
   apiKey: process.env.ZEROEVAL_API_KEY

@@ -7,7 +7,7 @@ description: Wrap Vercel AI SDK with automatic tracing
 ```typescript generateText
 import * as ai from 'ai';
 import { openai } from '@ai-sdk/openai';
-import { wrapVercelAI } from '@zeroeval/sdk';
+import { wrapVercelAI } from 'zeroeval';
 
 const wrappedAI = wrapVercelAI(ai);
 
@@ -20,7 +20,7 @@ const { text } = await wrappedAI.generateText({
 ```typescript streamText
 import * as ai from 'ai';
 import { openai } from '@ai-sdk/openai';
-import { wrapVercelAI } from '@zeroeval/sdk';
+import { wrapVercelAI } from 'zeroeval';
 
 const wrappedAI = wrapVercelAI(ai);
 
@@ -37,7 +37,7 @@ for await (const chunk of textStream) {
 ```typescript generateObject
 import * as ai from 'ai';
 import { openai } from '@ai-sdk/openai';
-import { wrapVercelAI } from '@zeroeval/sdk';
+import { wrapVercelAI } from 'zeroeval';
 import { z } from 'zod';
 
 const wrappedAI = wrapVercelAI(ai);
@@ -55,7 +55,7 @@ const { object } = await wrappedAI.generateObject({
 ```typescript embed
 import * as ai from 'ai';
 import { openai } from '@ai-sdk/openai';
-import { wrapVercelAI } from '@zeroeval/sdk';
+import { wrapVercelAI } from 'zeroeval';
 
 const wrappedAI = wrapVercelAI(ai);
 
@@ -136,7 +136,7 @@ The wrapper creates traced versions of SDK functions while preserving all origin
 
 ```typescript
 import * as ai from 'ai';
-import { wrapVercelAI } from '@zeroeval/sdk';
+import { wrapVercelAI } from 'zeroeval';
 
 const wrappedAI = wrapVercelAI(ai);
 

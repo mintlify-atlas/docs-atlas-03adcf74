@@ -6,7 +6,7 @@ description: Automatically wrap AI clients with observability tracing
 <RequestExample>
 ```typescript OpenAI Client
 import { OpenAI } from 'openai';
-import * as ze from '@zeroeval/sdk';
+import * as ze from 'zeroeval';
 
 const openai = ze.wrap(new OpenAI());
 
@@ -18,7 +18,7 @@ const completion = await openai.chat.completions.create({
 
 ```typescript Vercel AI SDK
 import * as ai from 'ai';
-import * as ze from '@zeroeval/sdk';
+import * as ze from 'zeroeval';
 
 const wrappedAI = ze.wrap(ai);
 
@@ -71,7 +71,7 @@ The wrapped client maintains full TypeScript type information from the original 
 
 ```typescript
 import { OpenAI } from 'openai';
-import * as ze from '@zeroeval/sdk';
+import * as ze from 'zeroeval';
 
 const openai = ze.wrap(new OpenAI());
 
@@ -122,7 +122,7 @@ If you haven't called `ze.init()` but have set `ZEROEVAL_API_KEY` in your enviro
 ZEROEVAL_API_KEY=your-api-key
 
 // app.ts
-import * as ze from '@zeroeval/sdk';
+import * as ze from 'zeroeval';
 import { OpenAI } from 'openai';
 
 // No need to call ze.init()

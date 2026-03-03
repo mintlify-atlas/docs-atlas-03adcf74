@@ -17,7 +17,6 @@ Every span contains:
 - **Status**: `status` ('ok' or 'error'), `error` object
 - **Signals**: `signals` (metrics and flags)
 
-Relevant code: [Span.ts:10-37](/home/daytona/workspace/source/src/observability/Span.ts:10-37)
 
 ## Creating spans
 
@@ -54,7 +53,6 @@ class OrderService {
 }
 ```
 
-Relevant code: [spanDecorator.ts:14-102](/home/daytona/workspace/source/src/observability/spanDecorator.ts:14-102)
 
 ### Manual span management
 
@@ -126,7 +124,6 @@ await withSpan({ name: 'parent' }, async () => {
 });
 ```
 
-Relevant code: [Tracer.ts:106-123](/home/daytona/workspace/source/src/observability/Tracer.ts:106-123)
 
 ## Timing
 
@@ -157,7 +154,6 @@ tracer.endSpan(span);
 console.log(span.durationMs); // ~100
 ```
 
-Relevant code: [Span.ts:16-17, 39-45](/home/daytona/workspace/source/src/observability/Span.ts:16-17)
 
 ## Capturing input and output
 
@@ -198,7 +194,6 @@ Input and output are automatically serialized to JSON:
 - BigInts are converted to strings
 - Functions are represented as `[Function name]`
 
-Relevant code: [Span.ts:52-61](/home/daytona/workspace/source/src/observability/Span.ts:52-61)
 
 ## Error handling
 
@@ -244,7 +239,6 @@ span.setError({ message: 'Failed' });
 span.status; // 'error' after setError() is called
 ```
 
-Relevant code: [Span.ts:47-50](/home/daytona/workspace/source/src/observability/Span.ts:47-50)
 
 ## Metadata
 
@@ -293,7 +287,6 @@ if (currentSpan) {
 }
 ```
 
-Relevant code: [Span.ts:22-25](/home/daytona/workspace/source/src/observability/Span.ts:22-25)
 
 ## Signals
 
@@ -310,7 +303,6 @@ span.addSignal('paymentMethod', 'card');  // auto-detected
 tracer.endSpan(span);
 ```
 
-Relevant code: [Span.ts:63-92](/home/daytona/workspace/source/src/observability/Span.ts:63-92)
 
 See [Signals](/concepts/signals) for more details.
 
@@ -338,7 +330,6 @@ const json = span.toJSON();
 // }
 ```
 
-Relevant code: [Span.ts:94-117](/home/daytona/workspace/source/src/observability/Span.ts:94-117)
 
 ## Best practices
 

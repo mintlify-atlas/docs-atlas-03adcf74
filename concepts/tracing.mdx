@@ -53,7 +53,6 @@ tracer.endSpan(rootSpan);
 ```
 </CodeGroup>
 
-Relevant code: [Tracer.ts:106-136](/home/daytona/workspace/source/src/observability/Tracer.ts:106-136)
 
 ## Trace lifecycle
 
@@ -105,7 +104,6 @@ The tracer buffers spans by trace until the entire trace is complete:
 - Spans are ordered parent-first before flushing
 - Active traces are tracked via reference counting (`_activeTraceCounts`)
 
-Relevant code: [Tracer.ts:138-175](/home/daytona/workspace/source/src/observability/Tracer.ts:138-175)
 
 ### 4. Flushing to backend
 
@@ -125,7 +123,6 @@ tracer.configure({
 });
 ```
 
-Relevant code: [Tracer.ts:204-230](/home/daytona/workspace/source/src/observability/Tracer.ts:204-230)
 
 ## Accessing current context
 
@@ -141,7 +138,6 @@ if (currentSpan) {
 }
 ```
 
-Relevant code: [Tracer.ts:89-92](/home/daytona/workspace/source/src/observability/Tracer.ts:89-92)
 
 ## Tag inheritance
 
@@ -174,7 +170,6 @@ if (currentSpan) {
 }
 ```
 
-Relevant code: [Tracer.ts:178-188](/home/daytona/workspace/source/src/observability/Tracer.ts:178-188)
 
 ## Best practices
 

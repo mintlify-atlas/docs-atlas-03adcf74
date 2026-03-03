@@ -10,7 +10,7 @@ The `tracer` is a singleton instance that manages the lifecycle of spans and tra
 You typically don't need to use the tracer directly—the `@span` decorator and helper functions provide a higher-level API. However, the tracer is useful for advanced use cases like manual span management.
 
 ```typescript
-import { tracer } from '@zeroeval/sdk';
+import { tracer } from 'zeroeval';
 
 const span = tracer.startSpan('my-operation');
 try {
